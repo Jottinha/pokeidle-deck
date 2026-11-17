@@ -45,6 +45,8 @@ internal sealed class DeckForm : Form
     private readonly ToolStripStatusLabel _summary = new();
     // ⇄ e ⚡, e não 🔁 e 🔋: na barra o Windows desenha esses dois emojis como quadrados.
     private readonly ToolStripButton _echoButton = new("⇄ Eco");
+    private readonly ToolStripButton _marketButton = new("$ Mercado");
+    private MarketWindow? _marketWindow;
     private bool _echo;
     private readonly ToolStripSplitButton _ultraButton = new("⚡ Ultra");
     // O menu ⚙ junta o que não precisa estar sempre à vista.
@@ -174,7 +176,9 @@ internal sealed class DeckForm : Form
         _bar.Items.AddRange(new ToolStripItem[] { _gridButton, _mainButton, _focusButton });
 
         // Direita, sempre à vista: Eco, Ultra e o menu ⚙. Itens à direita entram da direita para a esquerda.
-        _settingsButton.Alignment = _ultraButton.Alignment = _echoButton.Alignment = ToolStripItemAlignment.Right;
+        _settingsButton.Alignment = _ultraButton.Alignment = _echoButton.Alignment = _marketButton.Alignment = ToolStripItemAlignment.Right;
+        _marketButton.ToolTipText = Theme.Wrap("Analisador do Mercado da Comunidade: as oportunidades de revenda (abaixo da média, gold × gemas), com o lucro estimado depois da taxa. Só lê: o deck nunca compra");
+        _marketButton.Click += (_, _) => ShowMarket();
         _settingsButton.Font = new Font("Segoe UI Symbol", 12f);
         _settingsButton.ToolTipText = "Mais opções: zoom, extensões, sniper, tela cheia, diagnóstico";
         BuildSettingsMenu();
@@ -193,6 +197,7 @@ internal sealed class DeckForm : Form
         _bar.Items.Add(_settingsButton);
         _bar.Items.Add(_ultraButton);
         _bar.Items.Add(_echoButton);
+        _bar.Items.Add(_marketButton);
         // Os menus que descem da barra na mesma letra dela.
         foreach (var item in _bar.Items.OfType<ToolStripDropDownItem>())
             item.DropDown.Font = Theme.BarFont;
@@ -951,6 +956,27 @@ internal sealed class DeckForm : Form
                 "O deck usa o interruptor do próprio jogo (Configurações → Desempenho → Modo ULTRA Economia): " +
                 "recarregue a conta (⟳ no cabeçalho) e tente de novo, ou ligue por lá.",
                 Text, DeckBoxIcon.Warn);
+    }
+
+    // ---------- Mercado da Comunidade ----------
+
+    /// <summary>A janela do analisador do mercado (aberta de novo, só vem para a frente).</summary>
+    private void ShowMarket()
+    {
+        if (_marketWindow is { IsDisposed: false })
+        {
+            _marketWindow.Activate();
+            return;
+        }
+        int preferred = _config.Layout switch
+        {
+            DeckLayout.Main => _config.MainAccount,
+            DeckLayout.Focus => _config.Focused,
+            _ => Array.FindIndex(_panes, p => p.Health == PaneHealth.Ok),
+        };
+        _marketWindow = new MarketWindow(() => _panes, preferred);
+        _marketWindow.FormClosed += (_, _) => _marketWindow = null;
+        _marketWindow.Show(this);
     }
 
     // ---------- Ações das contas ----------

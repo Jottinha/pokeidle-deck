@@ -22,6 +22,7 @@
     <EmbeddedResource Include="deck.ico" LogicalName="deck.ico" />
     <EmbeddedResource Include="recompra.js" LogicalName="recompra.js" />
     <EmbeddedResource Include="pvp.js" LogicalName="pvp.js" />
+    <EmbeddedResource Include="mercado.js" LogicalName="mercado.js" />
   </ItemGroup>
 
 </Project>

@@ -61,20 +61,23 @@ Cada fase termina com o deck **compilando e testado por você nas 4 contas** ant
 - [x] **/hunt for PokeIdle nas 4 contas:** pelo ⚙ → Extensões → + Adicionar → Importar do meu Chrome, com "Instalar em
       todas as contas" ligado (o deck já faz isso; não precisa de código).
 
-## Fase 5 — Analisador do Mercado da Comunidade (depois)
+## Fase 5 — Analisador do Mercado da Comunidade
 
 Só leitura e aviso. **Nenhuma compra automática** — comprar fica sempre com você.
 
-- [ ] Janela **Mercado** (botão na barra), lendo o mercado pelo socket de uma conta escolhida (as mensagens que o
-      próprio jogo usa: `market.itens`, `market.listar`, `market.medias`, `market.historicoGlobal`).
-- [ ] Respeitar o limite de atualização do mercado do jogo (não pedir mais rápido que o botão Refresh deixa).
-- [ ] **Oportunidades que ele marca:**
-  - **Gold × gemas:** o mesmo item anunciado nas duas moedas; calcula quanto vale 1 gema em gold e mostra o
-    anúncio barato numa moeda em relação à outra.
-  - **Abaixo da média:** anúncio abaixo da média de 7 dias do jogo, já descontada a taxa de venda
-    (15% em gold; em gemas, 15% para itens e de 13% a 7,5% para pokémon). Só conta se comprar < 85% da revenda.
-  - **Fora da curva na espécie:** o mesmo pokémon com atributos parecidos (IV, P5, nível) bem abaixo dos outros.
-- [ ] Lista ordenada pelo lucro estimado, com favoritos e um aviso quando aparece algo bom.
+- [x] Janela **$ Mercado** (botão na barra), lendo o mercado pelo socket de uma conta escolhida (`mercado.js`, com a
+      mesma leitura `market.itens` da tela do jogo: o menor preço de cada item em gold e em gemas e a média de 7 dias).
+- [x] Respeitar o limite de atualização do mercado do jogo (no máximo 1 leitura a cada 5 s, como o Refresh; o
+      automático lê 1 vez por minuto).
+- [x] **Oportunidades em itens:**
+  - **Abaixo da média (gold ou gemas):** o menor anúncio abaixo da média de 7 dias, já descontada a taxa de quem revende.
+  - **Gold → gemas** e **gemas → gold:** o mesmo item mais barato numa moeda do que vale na outra, com a gema convertida
+    pelo valor que o próprio mercado dá a ela (mediana de média em gold ÷ média em gemas).
+- [x] Lista ordenada pelo lucro estimado em gold, com filtros de lucro mínimo (%) e de vendidos em 7 dias; duplo clique
+      explica a conta.
+- [ ] **Pokémon:** o mesmo pokémon com atributos parecidos (IV, P5, nível) bem abaixo dos outros (mais difícil: cada
+      pokémon é diferente; fica para uma próxima versão).
+- [ ] Favoritos e um aviso quando aparece algo bom.
 
 ---
 

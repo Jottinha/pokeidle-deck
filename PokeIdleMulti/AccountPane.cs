@@ -385,6 +385,8 @@ internal sealed class AccountPane : UserControl
         await core.AddScriptToExecuteOnDocumentCreatedAsync(Echo.CaptureScript);
         await core.AddScriptToExecuteOnDocumentCreatedAsync(Restock.Script);
         await core.AddScriptToExecuteOnDocumentCreatedAsync(Pvp.Script);
+        // O leitor do Mercado da Comunidade (só lê; quem usa é a janela Mercado do deck).
+        await core.AddScriptToExecuteOnDocumentCreatedAsync(Market.Script);
         await core.AddScriptToExecuteOnDocumentCreatedAsync(FrameLimitScript);
         await core.AddScriptToExecuteOnDocumentCreatedAsync(SpriteLimitScript);
         _fpsScript = null;
