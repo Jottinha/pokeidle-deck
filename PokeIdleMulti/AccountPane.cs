@@ -140,6 +140,9 @@ internal sealed class AccountPane : UserControl
     /// <summary>Um clique de verdade na página (para o eco repetir nas outras contas).</summary>
     public event Action<AccountPane, Echo.Click>? Clicked;
 
+    /// <summary>Uma novidade da conta (nível, captura) do relatorio.js, para o Telegram.</summary>
+    public event Action<AccountPane, string>? ReportReceived;
+
     /// <summary>O botão ⏻: ligar ou desligar a conta.</summary>
     public event Action<AccountPane>? PowerRequested;
 
@@ -310,6 +313,7 @@ internal sealed class AccountPane : UserControl
             await core.AddScriptToExecuteOnDocumentCreatedAsync(PaneDiag.PageScript);
         }
         core.Settings.IsStatusBarEnabled = false;
+        BlockTrackers(core);
         core.IsMuted = muted;
         UpdateMuteButton();
         WebView.ZoomFactor = zoom;
@@ -376,6 +380,8 @@ internal sealed class AccountPane : UserControl
             }
             if (message is not null && message.StartsWith(PaneDiag.MessagePrefix))
                 Diag?.Page(message);
+            else if (message is not null && message.StartsWith(TelegramNotifier.MessagePrefix))
+                ReportReceived?.Invoke(this, message);
             else if (message == "F11")
                 FullscreenRequested?.Invoke(this);
             else if (message is not null && Echo.Parse(message) is Echo.Click click)
@@ -387,6 +393,8 @@ internal sealed class AccountPane : UserControl
         await core.AddScriptToExecuteOnDocumentCreatedAsync(Pvp.Script);
         // O leitor do Mercado da Comunidade (só lê; quem usa é a janela Mercado do deck).
         await core.AddScriptToExecuteOnDocumentCreatedAsync(Market.Script);
+        // O relatório da conta (nível e capturas) para o Telegram do deck; só lê.
+        await core.AddScriptToExecuteOnDocumentCreatedAsync(TelegramNotifier.Script);
         await core.AddScriptToExecuteOnDocumentCreatedAsync(FrameLimitScript);
         await core.AddScriptToExecuteOnDocumentCreatedAsync(SpriteLimitScript);
         _fpsScript = null;
@@ -398,6 +406,31 @@ internal sealed class AccountPane : UserControl
             await prepare(core);
         _url = url;
         core.Navigate(url);
+    }
+
+    /// <summary>
+    /// Os rastreadores de terceiros que a página do jogo carrega (Facebook Pixel, Google Tag Manager e Analytics, o
+    /// Insights do Cloudflare): JavaScript rodando e mandando pedidos sem parar, em cada conta, sem servir para o jogo.
+    /// Só esses endereços passam pelo filtro (o resto nem chega no deck). O captcha do Cloudflare
+    /// (challenges.cloudflare.com) fica liberado: o login precisa dele.
+    /// </summary>
+    private static readonly string[] Trackers =
+    {
+        "*://connect.facebook.net/*",
+        "*://www.facebook.com/tr*",
+        "*://www.googletagmanager.com/*",
+        "*://www.google-analytics.com/*",
+        "*://*.google-analytics.com/*",
+        "*://analytics.google.com/*",
+        "*://static.cloudflareinsights.com/*",
+    };
+
+    private static void BlockTrackers(CoreWebView2 core)
+    {
+        foreach (var pattern in Trackers)
+            core.AddWebResourceRequestedFilter(pattern, CoreWebView2WebResourceContext.All, CoreWebView2WebResourceRequestSourceKinds.All);
+        core.WebResourceRequested += (_, e) =>
+            e.Response = core.Environment.CreateWebResourceResponse(null, 204, "No Content", "");
     }
 
     public void Reload()

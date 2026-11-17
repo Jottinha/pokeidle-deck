@@ -20,10 +20,12 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
     <EmbeddedResource Include="deck.ico" LogicalName="deck.ico" />
+    <EmbeddedResource Include="socket.js" LogicalName="socket.js" />
     <EmbeddedResource Include="recompra.js" LogicalName="recompra.js" />
     <EmbeddedResource Include="pvp.js" LogicalName="pvp.js" />
     <EmbeddedResource Include="mercado.js" LogicalName="mercado.js" />
     <EmbeddedResource Include="mercado.html" LogicalName="mercado.html" />
+    <EmbeddedResource Include="relatorio.js" LogicalName="relatorio.js" />
   </ItemGroup>
 
 </Project>

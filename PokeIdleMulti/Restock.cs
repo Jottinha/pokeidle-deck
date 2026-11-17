@@ -86,7 +86,7 @@ internal static class Restock
     };
 
     /// <summary>O script que roda em toda página do jogo (embutido no exe).</summary>
-    public static string Script { get; } = ReadScript();
+    public static string Script { get; } = SocketHub.With("recompra.js");
 
     /// <summary>Antes de a página contar o que tem: os nomes do catálogo do jogo, para a janela já abrir preenchida.</summary>
     public static readonly RestockOffer[] KnownBalls =
@@ -123,11 +123,4 @@ internal static class Restock
 
     /// <summary>Ouro por HP com duas casas ("0,80").</summary>
     public static string Cost(double value) => value.ToString("0.00", Br);
-
-    private static string ReadScript()
-    {
-        using var stream = typeof(Restock).Assembly.GetManifestResourceStream("recompra.js")!;
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
-    }
 }

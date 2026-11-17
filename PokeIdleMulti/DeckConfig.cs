@@ -93,6 +93,9 @@ internal sealed class DeckConfig
     /// <summary>A velocidade das partidas mostradas (completa ou mini) em cada conta: 0 = a do jogo (acelera para caber até a próxima).</summary>
     public double[] PvpSpeed { get; set; } = new double[Accounts];
 
+    /// <summary>O bot do Telegram que manda para o celular o nível e as capturas de cada conta.</summary>
+    public TelegramConfig Telegram { get; set; } = new();
+
     public static DeckConfig Load(string path)
     {
         DeckConfig config;
@@ -114,6 +117,7 @@ internal sealed class DeckConfig
         config.Pvp = Fill(config.Pvp, _ => false);
         config.PvpScreen = Fill(config.PvpScreen, _ => PvpScreens.Off).Select(PvpScreens.Normalized).ToArray();
         config.PvpSpeed = Fill(config.PvpSpeed, _ => 0d).Select(PvpScreens.NormalizedSpeed).ToArray();
+        config.Telegram = (config.Telegram ?? new TelegramConfig()).Normalized();
         config.Focused = Math.Clamp(config.Focused, 0, Accounts - 1);
         config.MainAccount = Math.Clamp(config.MainAccount, 0, Accounts - 1);
         config.MiniZoom = Math.Clamp(config.MiniZoom, 0.25, 1);

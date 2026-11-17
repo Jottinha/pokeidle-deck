@@ -139,6 +139,8 @@ internal sealed class PaneDiag
         _pageAt = DateTime.Now;
         _loadedAt = _openAt = null;
         _state = null;
+        _netGeneration++;
+        _ = SetNetworkAsync(true);
         Write($"===== {_name()}: abrindo {Diag.Bare(uri)}");
     }
 
@@ -161,7 +163,50 @@ internal sealed class PaneDiag
         _state = state;
         Write($"tela: {state} ({Since(_loadedAt ?? _pageAt)} s depois de carregar)");
         if (!state.StartsWith("carga") && _openAt is null)
+        {
             _openAt = DateTime.Now;
+            _ = QuietNetworkLaterAsync(_netGeneration);
+        }
+    }
+
+    // ---------- A rede do DevTools só enquanto o diagnóstico anota tudo ----------
+
+    // Ligada, o navegador instrumenta cada pedido e cada mensagem do socket do jogo e manda tudo para o deck (que lê na
+    // thread da tela). Depois que o jogo abre (mais o minuto de tudo), desliga; a próxima página liga de novo.
+    private const string NetworkEnable =
+        "{\"maxTotalBufferSize\":1048576,\"maxResourceBufferSize\":262144,\"maxPostDataSize\":0}";
+
+    private bool _networkOn;
+    private int _netGeneration;
+
+    private async Task SetNetworkAsync(bool on)
+    {
+        if (_attached is not CoreWebView2 core || _networkOn == on)
+            return;
+        _networkOn = on;
+        try
+        {
+            await core.CallDevToolsProtocolMethodAsync(on ? "Network.enable" : "Network.disable", on ? NetworkEnable : "{}");
+        }
+        catch (Exception ex)
+        {
+            _networkOn = !on;
+            Write($"não consegui {(on ? "ligar" : "desligar")} a rede do diagnóstico: " + ex.Message);
+            return;
+        }
+        if (!on)
+        {
+            _requests.Clear();
+            _sockets.Clear();
+            Write($"rede do diagnóstico desligada (o jogo abriu há {AfterOpen.TotalSeconds:0} s; volta ao recarregar)");
+        }
+    }
+
+    private async Task QuietNetworkLaterAsync(int generation)
+    {
+        await Task.Delay(AfterOpen);
+        if (generation == _netGeneration && _openAt is not null)
+            await SetNetworkAsync(false);
     }
 
     public void Page(string message) => Write("página: " + message[MessagePrefix.Length..]);
@@ -247,8 +292,8 @@ internal sealed class PaneDiag
         });
         try
         {
-            await core.CallDevToolsProtocolMethodAsync("Network.enable",
-                "{\"maxTotalBufferSize\":1048576,\"maxResourceBufferSize\":262144,\"maxPostDataSize\":0}");
+            await core.CallDevToolsProtocolMethodAsync("Network.enable", NetworkEnable);
+            _networkOn = true;
             await core.CallDevToolsProtocolMethodAsync("Log.enable", "{}");
         }
         catch (Exception ex)

@@ -59,7 +59,7 @@ internal sealed record MarketChance(
 /// </summary>
 internal static class Market
 {
-    public static string Script { get; } = ReadResource("mercado.js");
+    public static string Script { get; } = SocketHub.With("mercado.js");
 
     /// <summary>A página da janela do mercado (cartões em HTML).</summary>
     public static string Page { get; } = ReadResource("mercado.html");

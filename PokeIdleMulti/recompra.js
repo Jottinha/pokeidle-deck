@@ -44,41 +44,20 @@
     note(text);
   };
 
-  // O socket do jogo é o que abre para o próprio site (`wss://pokeidle.io`). O Proxy mantém o resto igual
-  // para quem vier depois (a classe, o prototype, o instanceof): o Rotom, por exemplo, também olha esse socket.
-  const Native = window.WebSocket;
-  if (typeof Native === 'function') {
-    window.WebSocket = new Proxy(Native, {
-      construct(target, args, newTarget) {
-        const ws = Reflect.construct(target, args, newTarget);
-        try {
-          if (new URL(String(args[0]), location.href).host === location.host) attach(ws);
-        } catch { }
-        return ws;
-      },
-    });
-  }
-
-  function attach(ws) {
-    socket = ws;
-    account = null;
-    pending = null;
-    ws.addEventListener('message', (e) => {
-      if (ws === socket) receive(e.data);
-    });
-  }
-
-  function receive(data) {
-    if (typeof data !== 'string') return;
+  // O socket do jogo (o que abre para o próprio site, `wss://pokeidle.io`) vem do socket.js, que lê cada mensagem uma
+  // vez só para os scripts do deck. A mensagem lida é a mesma para todos: aqui só se lê dela.
+  window.__deckSocket.subscribe({
     // A batalha chega o tempo todo: só vale ler a que traz uma compra.
-    const head = /^\{"t":"([^"]*)"/.exec(data);
-    if (head && (!WANTED.has(head[1]) || (head[1] === 'batalha' && !data.includes('"k":"compra"')))) return;
-    let m;
-    try {
-      m = JSON.parse(data);
-    } catch {
-      return;
-    }
+    wants: (t, data) => WANTED.has(t) && (t !== 'batalha' || data.includes('"k":"compra"')),
+    attach(ws) {
+      socket = ws;
+      account = null;
+      pending = null;
+    },
+    receive,
+  });
+
+  function receive(m) {
     if (m.t === 'welcome') {
       ballCatalog = Array.isArray(m.catalogoBolas) ? m.catalogoBolas : [];
       ours = Array.isArray(m.itensNossos) ? m.itensNossos : [];

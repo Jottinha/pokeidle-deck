@@ -113,7 +113,7 @@ internal static class Pvp
         $")), window.__deckPvp.set({(on ? "true" : "false")})) : false";
 
     /// <summary>O script da página (pvp.js).</summary>
-    public static string Script { get; } = ReadScript();
+    public static string Script { get; } = SocketHub.With("pvp.js");
 
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -189,12 +189,5 @@ internal static class Pvp
     {
         int seconds = (int)Math.Max(0, Math.Round(secs));
         return seconds >= 3600 ? $"{seconds / 3600} h {seconds % 3600 / 60:00}" : seconds >= 60 ? $"{seconds / 60} min" : $"{seconds} s";
-    }
-
-    private static string ReadScript()
-    {
-        using var stream = typeof(Pvp).Assembly.GetManifestResourceStream("pvp.js")!;
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
     }
 }

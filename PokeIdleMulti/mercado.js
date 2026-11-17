@@ -15,45 +15,22 @@
   const listings = {}; // "itemId:moeda" → { at, linhas }
   let lastAsk = 0;
 
-  const Native = window.WebSocket;
-  if (typeof Native === 'function') {
-    window.WebSocket = new Proxy(Native, {
-      construct(target, args, newTarget) {
-        const ws = Reflect.construct(target, args, newTarget);
-        try {
-          if (new URL(String(args[0]), location.href).host === location.host) attach(ws);
-        } catch { }
-        return ws;
-      },
-    });
-  }
-
-  function attach(ws) {
-    socket = ws;
-    ws.addEventListener('message', (e) => {
-      if (ws === socket) receive(e.data);
-    });
-  }
+  // O socket do jogo vem do socket.js, que lê cada mensagem uma vez só para os scripts do deck (aqui só se lê dela).
+  const hub = window.__deckSocket;
+  hub.subscribe({
+    wants: (t) => t === 'welcome' || t === 'market',
+    attach(ws) {
+      socket = ws;
+    },
+    receive,
+  });
 
   // O script pode chegar depois do socket (página já aberta): pega o que o jogo deixa à vista.
   function late() {
-    if (socket?.readyState === 1) return;
-    const ws = window.__activeGameWs;
-    try {
-      if (ws && ws.readyState === 1 && new URL(ws.url, location.href).host === location.host) attach(ws);
-    } catch { }
+    hub.late();
   }
 
-  function receive(data) {
-    if (typeof data !== 'string') return;
-    const head = /^\{"t":"([^"]*)"/.exec(data);
-    if (head && head[1] !== 'welcome' && head[1] !== 'market') return;
-    let m;
-    try {
-      m = JSON.parse(data);
-    } catch {
-      return;
-    }
+  function receive(m) {
     if (m.t === 'welcome') {
       if (Array.isArray(m.mercado?.catalogo)) catalog = m.mercado.catalogo.map((i) => ({ id: i.id, nome: i.nome, categoria: i.categoria }));
       const pct = m.economia?.taxaMercadoGoldPct ?? m.mercado?.taxaGoldPct;

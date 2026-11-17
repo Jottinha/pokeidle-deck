@@ -33,7 +33,6 @@
   let losses = 0;
   let points = null;
   let lastMatch = null;
-  let seen = 0; // mensagens do jogo vistas por este script (para a dica dizer por que não conectou)
   let welcomed = false;
   let cfg = { tela: 'off', vel: 0 }; // a Tela da batalha que a fila ligada mantém e a velocidade das partidas (0 = a do jogo)
   let matchAt = 0; // quando chegou a última partida (o replay que o jogo abre logo depois é dela)
@@ -48,48 +47,26 @@
     if (log.length > 30) log.shift();
   };
 
-  const Native = window.WebSocket;
-  if (typeof Native === 'function') {
-    window.WebSocket = new Proxy(Native, {
-      construct(target, args, newTarget) {
-        const ws = Reflect.construct(target, args, newTarget);
-        try {
-          if (new URL(String(args[0]), location.href).host === location.host) attach(ws);
-        } catch { }
-        return ws;
-      },
-    });
-  }
-
-  function attach(ws) {
-    if (!ws || ws === socket) return;
-    socket = ws;
-    asked = false;
-    fila = { na: false, desde: 0, tamanho: 0 };
-    ws.addEventListener('message', (e) => {
-      if (ws === socket) receive(e.data);
-    });
-  }
+  // O socket do jogo vem do socket.js, que lê cada mensagem uma vez só para os scripts do deck. A mensagem lida é a mesma
+  // para todos: o que muda vira cópia (`me.automation = { ... }`), nunca mexe dentro dela.
+  const hub = window.__deckSocket;
+  hub.subscribe({
+    wants: (t) => WANTED.has(t),
+    attach(ws) {
+      socket = ws;
+      asked = false;
+      fila = { na: false, desde: 0, tamanho: 0 };
+    },
+    receive,
+  });
 
   // O socket do jogo aberto antes deste script (a página carregou sem ele, e o deck injetou depois): o Rotom guarda o
   // socket do jogo em window.__activeGameWs. A conta é a mesma; o estado chega nos próximos deltas.
   function late() {
-    if (socket?.readyState === 1) return;
-    const ws = window.__activeGameWs;
-    if (ws && ws.readyState === 1 && new URL(ws.url, location.href).host === location.host) attach(ws);
+    hub.late();
   }
 
-  function receive(data) {
-    if (typeof data !== 'string') return;
-    seen++;
-    const head = /^\{"t":"([^"]*)"/.exec(data);
-    if (head && !WANTED.has(head[1])) return;
-    let m;
-    try {
-      m = JSON.parse(data);
-    } catch {
-      return;
-    }
+  function receive(m) {
     if (m.t === 'welcome') {
       welcomed = true;
       merge(m.estado, true);
@@ -121,7 +98,7 @@
     }
     if (m.filaAuto && on) note('o jogo pôs a conta na fila (auto-fila VIP)');
     if (m.filaAutoDesligada) {
-      if (me?.automation) me.automation.pvpAutoFila = false;
+      if (me?.automation) me.automation = { ...me.automation, pvpAutoFila: false };
       if (on) note('o jogo desligou a auto-fila VIP');
     }
     if (m.partida && typeof m.partida === 'object') {
@@ -398,7 +375,7 @@
         on,
         connected: socket?.readyState === 1,
         socket: socket ? socket.readyState : -1,
-        seen,
+        seen: hub.seen, // mensagens do jogo vistas (para a dica dizer por que não conectou)
         welcomed,
         state: !!me,
         vip: vip(),

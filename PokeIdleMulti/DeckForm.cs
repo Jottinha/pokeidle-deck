@@ -57,6 +57,9 @@ internal sealed class DeckForm : Form
     private readonly bool[] _hasSniper = new bool[Accounts];
     private readonly ToolStripMenuItem _fullscreenButton = new("Tela cheia") { ShortcutKeyDisplayString = "F11" };
     private readonly ToolStripMenuItem _diagStatus = new("🩺 Gerar diagnóstico…");
+    private readonly ToolStripMenuItem _telegramButton = new("📱 Telegram (celular)");
+    private readonly TelegramNotifier _telegram;
+    private bool _telegramLinking;
     private readonly ToolStripStatusLabel _ram = new();
     private readonly ToolStripStatusLabel _voteStatus = new();
     private readonly VoteState?[] _votes = new VoteState?[Accounts];
@@ -91,6 +94,7 @@ internal sealed class DeckForm : Form
         // O diagnóstico da carga do jogo.
         Diag.Folder = Path.Combine(_root, "diagnostico");
         _store = new ExtensionStore(_root);
+        _telegram = new TelegramNotifier(_config.Telegram, Accounts, i => _config.AccountNames[i], i => _config.Off[i]);
         if (_config.Layout != DeckLayout.Focus)
             _layoutBeforeFocus = _config.Layout;
         if (Wide(_config.Layout))
@@ -134,6 +138,7 @@ internal sealed class DeckForm : Form
             pane.PopupRequested += (p, extension, anchor) => _ = OpenExtensionPopupAsync(p, extension, anchor);
             pane.VoteRequested += p => _ = OpenVoteAsync(p, null);
             pane.TopIdleLinkRequested += (p, uri) => _ = OpenVoteAsync(p, uri);
+            pane.ReportReceived += (p, message) => _telegram.OnPageMessage(p.Index, message);
             _panes[i] = pane;
             _grid.Controls.Add(pane);
         }
@@ -220,6 +225,10 @@ internal sealed class DeckForm : Form
         _diagStatus.ToolTipText = Theme.Wrap("O jogo não carrega? Gera na Área de trabalho um .zip com o log da carga de cada conta, prints e as " +
                                              "informações do PC e da rede (sem senha, token nem cookie).");
         _diagStatus.Click += async (_, _) => await CreateDiagnosticAsync();
+        _telegramButton.ToolTipText = Theme.Wrap("Manda para o seu celular, por um bot do Telegram, quando uma conta sobe de nível, os shinies, " +
+                                                 "as capturas e um resumo de tempos em tempos. No Telegram, /status e /resumo respondem na hora");
+        _telegramButton.DropDownOpening += (_, _) => FillTelegramMenu();
+        _telegramButton.DropDownItems.Add("…");
         var about = new ToolStripMenuItem("Sobre o DeckPokeIdle…");
         about.Click += (_, _) => DeckBox.Show(this,
             $"{AppName}\n\n" +
@@ -228,7 +237,7 @@ internal sealed class DeckForm : Form
         _settingsButton.DropDownItems.AddRange(new ToolStripItem[]
         {
             _zoomButton, _fullscreenButton, new ToolStripSeparator(),
-            _extensionsButton, _sniperButton, new ToolStripSeparator(),
+            _extensionsButton, _sniperButton, _telegramButton, new ToolStripSeparator(),
             _diagStatus, about,
         });
     }
@@ -286,6 +295,7 @@ internal sealed class DeckForm : Form
 
         _clock.Start();
         OnClock();
+        _telegram.Start();
         if (imported.Count > 0)
         {
             var lines = imported.Select(r =>
@@ -317,6 +327,7 @@ internal sealed class DeckForm : Form
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         _clock.Stop();
+        _telegram.Dispose();
         SaveWindowBounds();
         SaveConfig();
         foreach (var pane in _panes)
@@ -1728,5 +1739,96 @@ internal sealed class DeckForm : Form
     }
 
     private void SaveConfig() => _config.Save(_configPath);
+
+    // ---------- Telegram (celular) ----------
+
+    private void FillTelegramMenu()
+    {
+        var t = _config.Telegram;
+        var items = _telegramButton.DropDownItems;
+        items.Clear();
+        bool linked = t.Token is not null && t.ChatId is not null;
+        string state = _telegramLinking ? "aguardando o /start…"
+            : !linked ? "não configurado"
+            : !t.On ? "desligado"
+            : _telegram.LastError is { } error ? "⚠ " + error
+            : "ligado";
+        items.Add(new ToolStripMenuItem("Situação: " + state) { Enabled = false });
+        items.Add(new ToolStripMenuItem(linked ? "Trocar o bot…" : "Configurar o bot…", null, async (_, _) => await LinkTelegramAsync())
+        {
+            Enabled = !_telegramLinking,
+        });
+        if (!linked)
+            return;
+
+        items.Add(new ToolStripMenuItem("Ligado", null, (_, _) =>
+        {
+            t.On = !t.On;
+            SaveConfig();
+            _telegram.Restart();
+        }) { Checked = t.On });
+        items.Add(new ToolStripSeparator());
+        void Toggle(string text, bool value, Action<bool> set, string tip) =>
+            items.Add(new ToolStripMenuItem(text, null, (_, _) => { set(!value); SaveConfig(); }) { Checked = value, ToolTipText = tip });
+        Toggle("⬆️ Avisar quando subir de nível", t.LevelUp, v => t.LevelUp = v, "Uma mensagem na hora em que uma conta sobe de nível");
+        Toggle("✨ Avisar cada shiny", t.Shiny, v => t.Shiny = v, "Uma mensagem na hora de cada shiny capturado");
+        Toggle("🎯 Avisar todas as capturas", t.AllCaptures, v => t.AllCaptures = v,
+            "Cada pokémon capturado, juntados numa mensagem por minuto (pode ser bastante coisa)");
+
+        var summary = new ToolStripMenuItem($"🗒 Resumo: {(t.SummaryHours == 0 ? "nunca" : $"a cada {t.SummaryHours} h")}");
+        foreach (int hours in new[] { 0, 1, 2, 4, 6, 12, 24 })
+        {
+            summary.DropDownItems.Add(new ToolStripMenuItem(hours == 0 ? "Nunca" : $"A cada {hours} h", null, (_, _) =>
+            {
+                t.SummaryHours = hours;
+                SaveConfig();
+                _telegram.ScheduleSummary();
+            }) { Checked = t.SummaryHours == hours });
+        }
+        summary.DropDown.Font = Theme.BarFont;
+        items.Add(summary);
+        items.Add(new ToolStripSeparator());
+        items.Add(new ToolStripMenuItem("Mandar o status agora", null, async (_, _) =>
+        {
+            if (!await _telegram.SendAsync(_telegram.Status()))
+                DeckBox.Show(this, "Não consegui mandar.\n\n" + (_telegram.LastError ?? "O Telegram está desligado."), "Telegram", DeckBoxIcon.Error);
+        }) { Enabled = t.On });
+    }
+
+    private async Task LinkTelegramAsync()
+    {
+        string? token = Prompt.Ask(this, "Telegram",
+            "1. No Telegram, abra o @BotFather, mande /newbot e siga os passos (nome e usuário do bot).\n" +
+            "2. Ele responde com um token (algo como 123456:ABC-...). Cole aqui.\n\n" +
+            "O token fica só no deck.json deste PC. Quem tiver ele consegue mandar mensagens pelo seu bot.",
+            _config.Telegram.Token ?? "", "Continuar");
+        if (string.IsNullOrWhiteSpace(token))
+            return;
+        token = token.Trim();
+
+        _telegramLinking = true;
+        using var cancel = new CancellationTokenSource();
+        var link = _telegram.LinkAsync(token, TimeSpan.FromMinutes(3), cancel.Token);
+        DeckBox.Show(this,
+            "Agora abra o seu bot no Telegram (o link t.me/... que o BotFather mandou) e toque em Iniciar, ou mande /start.\n\n" +
+            "Pode fechar esta caixa: o deck espera até 3 minutos e avisa quando ligar.", "Telegram");
+        var (bot, chat, error) = await link;
+        _telegramLinking = false;
+
+        if (chat is null)
+        {
+            DeckBox.Show(this, "Não liguei o Telegram.\n\n" + error, "Telegram", DeckBoxIcon.Error);
+            _telegram.Restart();
+            return;
+        }
+        _config.Telegram.Token = token;
+        _config.Telegram.ChatId = chat;
+        _config.Telegram.On = true;
+        SaveConfig();
+        _telegram.Restart();
+        await _telegram.SendAsync("✅ <b>DeckPokeIdle ligado</b>\nVou avisar aqui quando uma conta subir de nível e os shinies, " +
+                                  "e mandar um resumo de tempos em tempos.\n\n/status — nível, gold e gemas de cada conta\n/resumo — o que cada conta fez");
+        DeckBox.Show(this, $"Telegram ligado (@{bot}). Mandei uma mensagem de teste para você.", "Telegram");
+    }
 
 }
