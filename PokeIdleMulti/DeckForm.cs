@@ -35,12 +35,14 @@ internal sealed class DeckForm : Form
     private readonly ToolStrip _bar = new ClickThroughToolStrip();
     private readonly StatusStrip _status = new();
     private readonly Panel _grid = new() { Dock = DockStyle.Fill, BackColor = Theme.Back };
-    // Layouts: a grade (2×2 ou colunas, na setinha) e o foco. "Principal" entra na Fase 4.
+    // Layouts: a grade (2×2 ou colunas, na setinha), o Principal (uma grande e 3 miniaturas) e o foco. Na setinha do
+    // Principal e do Foco, a conta.
     private readonly ToolStripSplitButton _gridButton = new("Grade");
     private readonly ToolStripMenuItem _gridItem = new("Grade 2×2");
     private readonly ToolStripMenuItem _columnsItem = new("Colunas (lado a lado)");
-    private readonly ToolStripButton _focusButton = new("Foco");
-    private readonly ToolStripButton[] _accountButtons = new ToolStripButton[Accounts];
+    private readonly ToolStripSplitButton _mainButton = new("Principal");
+    private readonly ToolStripSplitButton _focusButton = new("Foco");
+    private readonly ToolStripStatusLabel _summary = new();
     // ⇄ e ⚡, e não 🔁 e 🔋: na barra o Windows desenha esses dois emojis como quadrados.
     private readonly ToolStripButton _echoButton = new("⇄ Eco");
     private bool _echo;
@@ -67,7 +69,9 @@ internal sealed class DeckForm : Form
     private bool _topIdleLookup;
     private readonly System.Windows.Forms.Timer _clock = new() { Interval = 1000 };
     private CoreWebView2Environment? _env;
+    // Para onde o foco volta (grade, colunas ou Principal) e qual grade o botão Grade abre.
     private DeckLayout _layoutBeforeFocus = DeckLayout.Grid;
+    private DeckLayout _lastGrid = DeckLayout.Grid;
     private bool _fullscreen;
     private FormWindowState _restoreState;
     private Rectangle _restoreBounds;
@@ -87,6 +91,8 @@ internal sealed class DeckForm : Form
         _store = new ExtensionStore(_root);
         if (_config.Layout != DeckLayout.Focus)
             _layoutBeforeFocus = _config.Layout;
+        if (Wide(_config.Layout))
+            _lastGrid = _config.Layout;
         // O zoom é um só para todas as contas. Do tempo em que cada uma tinha o seu, fica o da primeira ligada.
         var zoom = _config.Zoom[Enumerable.Range(0, Accounts).FirstOrDefault(i => !_config.Off[i])];
         Array.Fill(_config.Zoom, zoom);
@@ -122,6 +128,7 @@ internal sealed class DeckForm : Form
             pane.Clicked += (p, click) => _ = EchoAsync(p, click);
             pane.PowerRequested += p => _ = SetPaneOffAsync(p.Index, !p.Off);
             pane.MenuRequested += (p, at) => ShowAccountMenu(p.Index, at);
+            pane.HeaderClicked += OnHeaderClicked;
             pane.PopupRequested += (p, extension, anchor) => _ = OpenExtensionPopupAsync(p, extension, anchor);
             pane.VoteRequested += p => _ = OpenVoteAsync(p, null);
             pane.TopIdleLinkRequested += (p, uri) => _ = OpenVoteAsync(p, uri);
@@ -148,31 +155,22 @@ internal sealed class DeckForm : Form
 
         // Esquerda: os layouts.
         _gridButton.ToolTipText = "As 4 contas à vista (na setinha: em grade 2×2 ou lado a lado)";
-        _gridButton.ButtonClick += (_, _) => SetLayout(_layoutBeforeFocus);
+        _gridButton.ButtonClick += (_, _) => SetLayout(_lastGrid);
         _gridItem.Click += (_, _) => SetLayout(DeckLayout.Grid);
         _columnsItem.Click += (_, _) => SetLayout(DeckLayout.Columns);
         _gridButton.DropDownItems.AddRange(new ToolStripItem[] { _gridItem, _columnsItem });
-        _focusButton.ToolTipText = "Uma conta ocupando o deck (as outras continuam rodando escondidas)";
-        _focusButton.Click += (_, _) => FocusPane(_config.Focused);
-        _bar.Items.AddRange(new ToolStripItem[] { _gridButton, _focusButton, new ToolStripSeparator() });
-
-        // As contas: até as miniaturas (Fase 4) e o menu ⋯ do cabeçalho (Fase 3), a troca e o menu de cada uma ficam aqui.
-        for (int i = 0; i < Accounts; i++)
-        {
-            int index = i;
-            var button = new ToolStripButton
-            {
-                ToolTipText = "Clique: ampliar esta conta (de novo: voltar). Botão direito: mais opções",
-            };
-            button.Click += (_, _) => ToggleFocus(index);
-            button.MouseUp += (_, e) =>
-            {
-                if (e.Button == MouseButtons.Right)
-                    ShowAccountMenu(index);
-            };
-            _accountButtons[i] = button;
-            _bar.Items.Add(button);
-        }
+        _mainButton.ToolTipText = Theme.Wrap("Uma conta grande e as outras 3 em miniatura ao lado (clique no cabeçalho de uma " +
+                                             "miniatura para trazer ela para o lugar da grande). Na setinha, qual é a principal");
+        _mainButton.ButtonClick += (_, _) => SetMain(_config.MainAccount);
+        _mainButton.DropDownOpening += (_, _) =>
+            FillAccountChoice(_mainButton, _config.MainAccount, _config.Layout == DeckLayout.Main, SetMain);
+        _mainButton.DropDownItems.Add("…");
+        _focusButton.ToolTipText = "Uma conta ocupando o deck (as outras continuam rodando escondidas). Na setinha, qual conta";
+        _focusButton.ButtonClick += (_, _) => FocusPane(_config.Focused);
+        _focusButton.DropDownOpening += (_, _) =>
+            FillAccountChoice(_focusButton, _config.Focused, _config.Layout == DeckLayout.Focus, FocusPane);
+        _focusButton.DropDownItems.Add("…");
+        _bar.Items.AddRange(new ToolStripItem[] { _gridButton, _mainButton, _focusButton });
 
         // Direita, sempre à vista: Eco, Ultra e o menu ⚙. Itens à direita entram da direita para a esquerda.
         _settingsButton.Alignment = _ultraButton.Alignment = _echoButton.Alignment = ToolStripItemAlignment.Right;
@@ -230,6 +228,9 @@ internal sealed class DeckForm : Form
         _status.SizingGrip = false;
         _status.ShowItemToolTips = true;
         _ram.ForeColor = Theme.Muted;
+        _summary.ForeColor = Theme.Muted;
+        _status.Items.Add(_summary);
+        _status.Items.Add(new ToolStripStatusLabel("·") { ForeColor = Theme.Muted });
         _status.Items.Add(_ram);
         _status.Items.Add(new ToolStripStatusLabel("·") { ForeColor = Theme.Muted });
         _voteStatus.ForeColor = Theme.Muted;
@@ -268,6 +269,7 @@ internal sealed class DeckForm : Form
         await Task.WhenAll(_panes.Where(p => !p.Off).Select(p =>
             p.InitializeAsync(_env, GameUrl, _config.Zoom[p.Index], _config.Muted[p.Index], null, RepairExtensions)));
         await RefreshExtensionButtonsAsync();
+        ApplyMiniatures();
 
         _clock.Start();
         OnClock();
@@ -388,8 +390,23 @@ internal sealed class DeckForm : Form
     {
         DeckLayout.Columns => Cell(area, index, 0, Accounts, 1),
         DeckLayout.Focus => index == _config.Focused ? Cell(area, 0, 0, 1, 1) : null,
+        DeckLayout.Main => MainCell(index, area),
         _ => Cell(area, index % 2, index / 2, 2, 2),
     };
+
+    /// <summary>
+    /// Layout Principal: a conta principal ocupa ~3/4 da largura; as outras 3, empilhadas na coluna da direita, na ordem
+    /// das contas.
+    /// </summary>
+    private Rectangle MainCell(int index, Rectangle area)
+    {
+        const int MainCols = 3, Cols = MainCols + 1;
+        if (index == _config.MainAccount)
+            return Rectangle.FromLTRB(area.X + Gap, area.Y + Gap,
+                area.X + MainCols * (area.Width - Gap) / Cols, area.Bottom);
+        int row = Enumerable.Range(0, Accounts).Where(i => i != _config.MainAccount).ToList().IndexOf(index);
+        return Cell(area, MainCols, row, Cols, Accounts - 1);
+    }
 
     private static Rectangle Cell(Rectangle area, int col, int row, int cols, int rows) => Rectangle.FromLTRB(
         area.X + Gap + col * (area.Width - Gap) / cols,
@@ -397,14 +414,19 @@ internal sealed class DeckForm : Form
         area.X + (col + 1) * (area.Width - Gap) / cols,
         area.Y + (row + 1) * (area.Height - Gap) / rows);
 
+    /// <summary>Grade e colunas: as 4 contas pequenas, no zoom que a pessoa escolheu. Foco e Principal: a conta grande em 100%.</summary>
+    private static bool Wide(DeckLayout layout) => layout is DeckLayout.Grid or DeckLayout.Columns;
+
     private void SetLayout(DeckLayout layout)
     {
-        bool entering = layout == DeckLayout.Focus && _config.Layout != DeckLayout.Focus;
-        bool leaving = layout != DeckLayout.Focus && _config.Layout == DeckLayout.Focus;
+        bool entering = !Wide(layout) && Wide(_config.Layout);
+        bool leaving = Wide(layout) && !Wide(_config.Layout);
         _config.Layout = layout;
+        if (Wide(layout))
+            _lastGrid = layout;
         if (layout != DeckLayout.Focus)
             _layoutBeforeFocus = layout;
-        // A conta ampliada fica em 100%; voltar para a grade ou as colunas devolve o zoom de antes (o que deixa
+        // A conta grande fica em 100%; voltar para a grade ou as colunas devolve o zoom de antes (o que deixa
         // as 4 contas cabendo na tela, como 50%).
         if (entering)
         {
@@ -416,7 +438,40 @@ internal sealed class DeckForm : Form
             SetZoomAll(zoom);
         }
         ArrangePanes();
+        ApplyMiniatures();
         UpdateBar();
+        SaveConfig();
+    }
+
+    /// <summary>
+    /// Cada conta no papel dela: no layout Principal as miniaturas ficam no zoom das miniaturas, com o ritmo da sessão no
+    /// cabeçalho e (com a opção) no Ultra; a principal e as contas dos outros layouts voltam ao normal.
+    /// </summary>
+    private void ApplyMiniatures()
+    {
+        foreach (var pane in _panes)
+        {
+            bool mini = _config.Layout == DeckLayout.Main && pane.Index != _config.MainAccount;
+            pane.Compact = mini;
+            double zoom = mini ? _config.MiniZoom : _config.Zoom[pane.Index];
+            if (Math.Abs(pane.WebView.ZoomFactor - zoom) > 0.001)
+                pane.WebView.ZoomFactor = zoom;
+            bool ultra = _config.Ultra || (mini && _config.MiniUltra);
+            if (pane.Ultra != ultra)
+            {
+                pane.Ultra = ultra;
+                if (!pane.Off)
+                    _ = pane.SetUltraAsync(ultra);
+            }
+        }
+    }
+
+    /// <summary>Layout Principal com <paramref name="index"/> como a conta grande.</summary>
+    private void SetMain(int index)
+    {
+        _config.MainAccount = index;
+        SetLayout(DeckLayout.Main);
+        _panes[index].WebView.Focus();
     }
 
     private void FocusPane(int index)
@@ -426,27 +481,84 @@ internal sealed class DeckForm : Form
         _panes[index].WebView.Focus();
     }
 
+    /// <summary>
+    /// Ampliar (duplo clique no cabeçalho, menu ⋯): no Principal, a miniatura vira a principal; nos outros, entra no foco
+    /// ou volta dele.
+    /// </summary>
     private void ToggleFocus(int index)
     {
-        if (_config.Layout == DeckLayout.Focus && _config.Focused == index)
+        if (_config.Layout == DeckLayout.Main && index != _config.MainAccount)
+            SetMain(index);
+        else if (_config.Layout == DeckLayout.Focus && _config.Focused == index)
             SetLayout(_layoutBeforeFocus);
         else
             FocusPane(index);
     }
 
+    /// <summary>Um clique simples no cabeçalho: no Principal, a miniatura troca de lugar com a principal.</summary>
+    private void OnHeaderClicked(AccountPane pane)
+    {
+        if (_config.Layout == DeckLayout.Main && pane.Index != _config.MainAccount)
+            SetMain(pane.Index);
+    }
+
     private void UpdateBar()
     {
-        bool grid = _config.Layout != DeckLayout.Focus;
-        _gridButton.Text = _layoutBeforeFocus == DeckLayout.Columns ? "Colunas" : "Grade";
-        _gridButton.ForeColor = grid ? Theme.Accent : Theme.Text;
-        _gridItem.Checked = _config.Layout == DeckLayout.Grid;
-        _columnsItem.Checked = _config.Layout == DeckLayout.Columns;
-        _focusButton.Checked = !grid;
+        var layout = _config.Layout;
+        _gridButton.Text = _lastGrid == DeckLayout.Columns ? "Colunas" : "Grade";
+        _gridButton.ForeColor = Wide(layout) ? Theme.Accent : Theme.Text;
+        _gridItem.Checked = layout == DeckLayout.Grid;
+        _columnsItem.Checked = layout == DeckLayout.Columns;
+        _mainButton.ForeColor = layout == DeckLayout.Main ? Theme.Accent : Theme.Text;
+        _mainButton.Text = layout == DeckLayout.Main ? "Principal: " + _config.AccountNames[_config.MainAccount] : "Principal";
+        _focusButton.ForeColor = layout == DeckLayout.Focus ? Theme.Accent : Theme.Text;
+        _focusButton.Text = layout == DeckLayout.Focus ? "Foco: " + _config.AccountNames[_config.Focused] : "Foco";
+        UpdateSummary();
+    }
+
+    /// <summary>A setinha do Principal e do Foco: escolher a conta.</summary>
+    private void FillAccountChoice(ToolStripDropDownItem button, int current, bool active, Action<int> choose)
+    {
+        var items = button.DropDownItems;
+        items.Clear();
         for (int i = 0; i < Accounts; i++)
         {
-            _accountButtons[i].Text = _config.AccountNames[i];
-            _accountButtons[i].Checked = _config.Layout == DeckLayout.Focus && _config.Focused == i;
+            int index = i;
+            var item = new ToolStripMenuItem(_config.AccountNames[i]) { Checked = active && i == current };
+            item.Click += (_, _) => choose(index);
+            items.Add(item);
         }
+    }
+
+    private static string HealthText(PaneHealth health) => health switch
+    {
+        PaneHealth.Ok => "no jogo",
+        PaneHealth.Loading => "carregando",
+        PaneHealth.Login => "na tela de login",
+        PaneHealth.Error => "com erro",
+        _ => "desligada",
+    };
+
+    /// <summary>O começo da barra de baixo: quantas contas estão no jogo, na tela de login, com erro ou desligadas.</summary>
+    private void UpdateSummary()
+    {
+        var health = _panes.Select(p => p.Health).ToList();
+        var parts = new List<string>();
+        void Add(PaneHealth kind, string one, string many)
+        {
+            int n = health.Count(h => h == kind);
+            if (n > 0)
+                parts.Add($"{n} {(n == 1 ? one : many)}");
+        }
+        Add(PaneHealth.Ok, "no jogo", "no jogo");
+        Add(PaneHealth.Loading, "carregando", "carregando");
+        Add(PaneHealth.Login, "no login", "no login");
+        Add(PaneHealth.Error, "com erro", "com erro");
+        Add(PaneHealth.Off, "desligada", "desligadas");
+        _summary.Text = $"{Accounts} contas: {string.Join(", ", parts)}";
+        _summary.ForeColor = health.Any(h => h is PaneHealth.Login or PaneHealth.Error) ? Theme.Warn : Theme.Muted;
+        _summary.ToolTipText = string.Join("\n", _panes.Select(p =>
+            $"{p.AccountName}: {HealthText(p.Health)}" + (p.Stats is string s ? $" · {s}" : "")));
     }
 
     private void OnClock()
@@ -458,6 +570,9 @@ internal sealed class DeckForm : Form
             _ = UpdateMemoryAsync();
         if (_seconds % 5 == 0)
             UpdateBar();
+        if (_seconds % 5 == 1)
+            foreach (var pane in _panes)
+                _ = pane.ReadStatsAsync();
         if (_seconds % 30 == 0)
             foreach (var pane in _panes)
                 _ = pane.CheckLoginScreenAsync();
@@ -729,6 +844,13 @@ internal sealed class DeckForm : Form
         items.Clear();
         items.Add(_config.Ultra ? "Desligar o ULTRA" : "Ligar o ULTRA (em todas as contas)", null,
             async (_, _) => await SetUltraAsync(!_config.Ultra));
+        var mini = new ToolStripMenuItem("Miniaturas sempre em Ultra (layout Principal)")
+        {
+            Checked = _config.MiniUltra,
+            ToolTipText = "No layout Principal, as 3 miniaturas ligam o Ultra sozinhas: a caixa de números é o que dá para ler numa conta pequena, e gasta bem menos",
+        };
+        mini.Click += (_, _) => { _config.MiniUltra = !_config.MiniUltra; SaveConfig(); ApplyMiniatures(); };
+        items.Add(mini);
         items.Add(new ToolStripSeparator());
         var motion = new ToolStripMenuItem("🐢 Menos animações (no jogo normal e na tela de login)")
         {
@@ -809,8 +931,9 @@ internal sealed class DeckForm : Form
         var failed = new List<string>();
         foreach (var pane in _panes)
         {
-            pane.Ultra = on;
-            if (!pane.Off && !await pane.SetUltraAsync(on))
+            bool want = on || (_config.Layout == DeckLayout.Main && pane.Index != _config.MainAccount && _config.MiniUltra);
+            pane.Ultra = want;
+            if (!pane.Off && !await pane.SetUltraAsync(want) && want == on)
                 failed.Add(pane.AccountName);
         }
         if (failed.Count > 0)
@@ -839,7 +962,8 @@ internal sealed class DeckForm : Form
         }
         else
         {
-            menu.Items.Add(_config.Layout == DeckLayout.Focus && _config.Focused == index ? "Voltar para a grade" : "Ampliar no deck",
+            menu.Items.Add(_config.Layout == DeckLayout.Main && index != _config.MainAccount ? "Trazer para o lugar da principal"
+                : _config.Layout == DeckLayout.Focus && _config.Focused == index ? "Voltar" : "Ampliar no deck",
                 null, (_, _) => ToggleFocus(index));
             menu.Items.Add("Recarregar limpo (sem o cache do jogo)", null, (_, _) => _ = pane.ReloadCleanAsync());
             menu.Items.Add(pane.Muted ? "Ligar o som" : "Desligar o som", null, (_, _) => pane.SetMuted(!pane.Muted));
@@ -909,6 +1033,7 @@ internal sealed class DeckForm : Form
                 // Estava desligada desde que o deck abriu: o navegador dela é criado agora.
                 await pane.InitializeAsync(_env, GameUrl, _config.Zoom[index], _config.Muted[index], null, RepairExtensions);
                 await RefreshExtensionButtonsAsync();
+                ApplyMiniatures();
             }
             _voteRefreshAt[index] = DateTime.Now;
         }
@@ -1282,6 +1407,7 @@ internal sealed class DeckForm : Form
             _config.Zoom[pane.Index] = zoom;
         }
         ShowZoom();
+        ApplyMiniatures();
     }
 
     /// <summary>Repete nas outras contas o clique feito numa; avisa no cabeçalho de quem não tem esse botão.</summary>

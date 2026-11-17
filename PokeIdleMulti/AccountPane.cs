@@ -6,6 +6,9 @@ namespace PokeIdleMulti;
 
 internal enum PaneStatus { Starting, Loading, Ok, Failed }
 
+/// <summary>Como a conta está para quem olha: no jogo, carregando, na tela de login, com erro ou desligada.</summary>
+internal enum PaneHealth { Ok, Loading, Login, Error, Off }
+
 /// <summary>
 /// Uma conta dentro do deck: um cabeçalho fino (status, tempo rodando, extensões, botões) e a página
 /// do jogo ocupando o resto, sem barra de navegador. Cada conta tem um perfil próprio do WebView2,
@@ -101,6 +104,9 @@ internal sealed class AccountPane : UserControl
         _mute.Click += (_, _) => SetMuted(!Muted);
         _vote.Click += (_, _) => VoteRequested?.Invoke(this);
         _header.DoubleClick += (_, _) => FocusRequested?.Invoke(this);
+        _header.Click += (_, _) => HeaderClicked?.Invoke(this);
+        foreach (var label in new ToolStripItem[] { _dot, _name, _info })
+            label.Click += (_, _) => HeaderClicked?.Invoke(this);
         _header.SizeChanged += (_, _) => FitHeader();
         _header.Items.AddRange(new ToolStripItem[] { _dot, _name, _info, _more, _power, _mute, _reload, _pvp, _restock, _vote });
         foreach (var item in new ToolStripItem[] { _more, _power, _mute, _reload, _pvp, _restock, _vote })
@@ -135,6 +141,89 @@ internal sealed class AccountPane : UserControl
 
     /// <summary>O ⋯ do cabeçalho: o deck abre o menu da conta neste ponto da tela.</summary>
     public event Action<AccountPane, Point>? MenuRequested;
+
+    /// <summary>Um clique no nome ou no espaço livre do cabeçalho (no layout Principal, a miniatura vira a principal).</summary>
+    public event Action<AccountPane>? HeaderClicked;
+
+    /// <summary>
+    /// Miniatura (layout Principal): o cabeçalho mostra o ritmo da sessão (XP/h e gold/h) no lugar do tempo rodando, e um
+    /// clique nele troca a conta com a principal.
+    /// </summary>
+    public bool Compact
+    {
+        get => _compact;
+        set
+        {
+            if (_compact == value)
+                return;
+            _compact = value;
+            _header.Cursor = value ? Cursors.Hand : Cursors.Default;
+            _name.ToolTipText = value ? "Clique para trazer esta conta para o lugar da principal" : null;
+            RefreshHeader();
+        }
+    }
+
+    private bool _compact;
+
+    /// <summary>O ritmo da sessão do jogo ("202M XP/h · 516k gold/h"), lido da página; null sem o jogo ou sem a sessão.</summary>
+    public string? Stats { get; private set; }
+
+    /// <summary>
+    /// Lê o XP/h e o gold/h da sessão: da caixa do Ultra (quando a conta está nele) ou do painel "Sessão" do jogo.
+    /// </summary>
+    private const string StatsScript =
+        "(() => { const t = s => { const e = document.querySelector(s); return e ? e.textContent : null; };" +
+        " const xp = t('.ultra-linha[data-u=\"xpTreinador\"] small') ?? t('#sessao-xp-treinador-h');" +
+        " const gold = t('.ultra-linha[data-u=\"gold\"] small') ?? t('#sessao-gold-h');" +
+        " return JSON.stringify({ xp, gold }); })()";
+
+    public async Task ReadStatsAsync()
+    {
+        string? stats = null;
+        if (!Off && OnGame && _status == PaneStatus.Ok && !_loginScreen)
+        {
+            try
+            {
+                var json = JsonSerializer.Deserialize<string>(await WebView.ExecuteScriptAsync(StatsScript));
+                using var doc = JsonDocument.Parse(json ?? "{}");
+                string? Part(string key, string unit) =>
+                    doc.RootElement.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String && Short(v.GetString()) is string n
+                        ? $"{n} {unit}/h" : null;
+                var parts = new[] { Part("xp", "XP"), Part("gold", "gold") }.OfType<string>().ToList();
+                stats = parts.Count > 0 ? string.Join(" · ", parts) : null;
+            }
+            catch
+            {
+                // Página recarregando: fica sem os números até a próxima leitura.
+            }
+        }
+        if (stats != Stats)
+        {
+            Stats = stats;
+            RefreshHeader();
+        }
+    }
+
+    /// <summary>Um número do jogo ("202.633.115" ou "202633115/h") em curto: 202M, 516k, 950.</summary>
+    private static string? Short(string? text)
+    {
+        var digits = new string((text ?? "").TakeWhile(c => c != '/').Where(char.IsDigit).ToArray());
+        if (digits.Length == 0 || !long.TryParse(digits, out long n))
+            return null;
+        var pt = System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
+        return n >= 1_000_000_000 ? (n / 1e9).ToString(n >= 10_000_000_000 ? "0" : "0.#", pt) + "B"
+            : n >= 1_000_000 ? (n / 1e6).ToString(n >= 10_000_000 ? "0" : "0.#", pt) + "M"
+            : n >= 1_000 ? (n / 1e3).ToString(n >= 10_000 ? "0" : "0.#", pt) + "k"
+            : n.ToString(pt);
+    }
+
+    /// <summary>Como a conta está, na ordem do resumo da barra de baixo (a mesma conta da cor da bolinha).</summary>
+    public PaneHealth Health =>
+        Off ? PaneHealth.Off
+        : _status == PaneStatus.Failed ? PaneHealth.Error
+        : _loginScreen ? PaneHealth.Login
+        : _status == PaneStatus.Ok && _statusText is null ? PaneHealth.Ok
+        : PaneHealth.Loading;
 
     /// <summary>As extensões desta conta que têm popup (o deck põe no menu ⋯).</summary>
     public IReadOnlyList<ExtensionInfo> Extensions => _extensions;
@@ -1078,11 +1167,16 @@ internal sealed class AccountPane : UserControl
             : _loginScreen ? "Na tela de login: entre na conta ou desligue-a (parada ali ela vai juntando memória)"
             : _statusText is not null ? Capitalize(_statusText)
             : _status == PaneStatus.Ok ? "No jogo" : "Abrindo…";
+        string uptime = StartedAt is DateTime started ? FormatUptime(DateTime.Now - started) : "";
         var info = DateTime.Now < _noteUntil ? "· " + _note
             : _statusText is not null ? "· " + _statusText
             : _loginScreen ? "· na tela de login"
-            : StartedAt is DateTime started ? "· " + FormatUptime(DateTime.Now - started)
+            // Na miniatura o ritmo da sessão vale mais que o tempo rodando (que fica na dica da bolinha).
+            : _compact && Stats is not null ? "· " + Stats
+            : uptime.Length > 0 ? "· " + uptime + (Stats is not null ? " · " + Stats : "")
             : "";
+        if (uptime.Length > 0 && Health == PaneHealth.Ok)
+            _dot.ToolTipText = $"No jogo há {uptime}";
         if (_info.Text != info)
         {
             _info.Text = info;

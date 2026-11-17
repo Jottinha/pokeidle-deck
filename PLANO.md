@@ -29,10 +29,10 @@ Cada fase termina com o deck **compilando e testado por você nas 4 contas** ant
 
 ## Fase 2 — Barra de cima enxuta
 
-- [x] **Esquerda:** nome do deck + layouts: **Grade** (com "Colunas" na setinha), **Foco**. (**Principal** entra na Fase 4.)
+- [x] **Esquerda:** nome do deck + layouts: **Grade** (com "Colunas" na setinha), **Principal** e **Foco** (com a conta na setinha).
 - [x] **Direita, sempre à vista:** **Ultra**, **Eco**, **Mercado** (só aparece quando a Fase 5 existir), **⚙**.
 - [x] **Menu ⚙** junta o resto: Extensões, Sniper, Zoom, Tela cheia (F11 continua), Diagnóstico e **Sobre** (com o crédito "by: artbruno", que sai da barra de baixo, e o link do projeto original).
-- [ ] Saem da barra os 4 botões das contas: a troca de conta passa a ser pelas miniaturas, e o menu de cada conta
+- [x] Saem da barra os 4 botões das contas: a troca de conta passa a ser pelas miniaturas (e pela setinha do Principal e do Foco), e o menu de cada conta
       passa para o "⋯" do cabeçalho dela (Fase 3). Ficam na barra até lá, para não perder o acesso.
 
 ## Fase 3 — Cabeçalho de cada conta
@@ -46,13 +46,13 @@ Cada fase termina com o deck **compilando e testado por você nas 4 contas** ant
 
 ## Fase 4 — Layout Principal (uma conta grande, 3 pequenas)
 
-- [ ] Novo layout: a principal ocupa ~75% da largura com zoom de 100%; as outras 3 empilhadas à direita.
-- [ ] **Clicar numa miniatura troca ela com a principal.** O deck lembra qual é a principal e o layout ao reabrir.
-- [ ] **Miniaturas em Ultra automático** (opção, ligada de fábrica): ao virar miniatura a conta liga o Ultra do jogo;
+- [x] Novo layout: a principal ocupa ~75% da largura com zoom de 100%; as outras 3 empilhadas à direita.
+- [x] **Clicar numa miniatura troca ela com a principal.** O deck lembra qual é a principal e o layout ao reabrir.
+- [x] **Miniaturas em Ultra automático** (opção, ligada de fábrica): ao virar miniatura a conta liga o Ultra do jogo;
       ao virar principal volta ao normal (se o Ultra geral não estiver ligado).
-- [ ] **Cartão de números na miniatura:** nome, status, **XP/h** e **lucro/h** da sessão (os mesmos do painel
-      "Sessão" do jogo), lidos da página da conta.
-- [ ] **Barra de baixo como resumo:** "4 contas: 3 caçando, 1 no login" · RAM total · quais contas podem votar.
+- [x] **Cartão de números na miniatura:** nome, status, **XP/h** e **gold/h** da sessão (os mesmos do painel
+      "Sessão" do jogo, ou da caixa do Ultra), lidos da página da conta. O gold/h é o bruto: a caixa do Ultra não mostra o lucro.
+- [x] **Barra de baixo como resumo:** "4 contas: 3 caçando, 1 no login" · RAM total · quais contas podem votar.
 
 ## Fase 5 — Analisador do Mercado da Comunidade (depois)
 

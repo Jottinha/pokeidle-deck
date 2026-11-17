@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace PokeIdleMulti;
 
-internal enum DeckLayout { Grid, Columns, Focus }
+internal enum DeckLayout { Grid, Columns, Focus, Main }
 
 /// <summary>Preferências do deck salvas entre uma execução e outra.</summary>
 internal sealed class DeckConfig
@@ -22,6 +22,18 @@ internal sealed class DeckConfig
 
     /// <summary>A conta ampliada no layout de foco.</summary>
     public int Focused { get; set; }
+
+    /// <summary>A conta grande no layout Principal (as outras 3 ficam em miniatura ao lado).</summary>
+    public int MainAccount { get; set; }
+
+    /// <summary>
+    /// No layout Principal, as miniaturas ligam o Ultra do jogo sozinhas (a caixa de números é o que dá para ler numa
+    /// conta pequena, e gasta bem menos). Ao virar a principal, a conta volta ao jogo normal (se o Ultra geral estiver desligado).
+    /// </summary>
+    public bool MiniUltra { get; set; } = true;
+
+    /// <summary>O zoom das miniaturas no layout Principal.</summary>
+    public double MiniZoom { get; set; } = 0.5;
 
     /// <summary>Zoom da página de cada conta (Ctrl + roda do mouse).</summary>
     public double[] Zoom { get; set; } = { 1, 1, 1, 1 };
@@ -103,6 +115,8 @@ internal sealed class DeckConfig
         config.PvpScreen = Fill(config.PvpScreen, _ => PvpScreens.Off).Select(PvpScreens.Normalized).ToArray();
         config.PvpSpeed = Fill(config.PvpSpeed, _ => 0d).Select(PvpScreens.NormalizedSpeed).ToArray();
         config.Focused = Math.Clamp(config.Focused, 0, Accounts - 1);
+        config.MainAccount = Math.Clamp(config.MainAccount, 0, Accounts - 1);
+        config.MiniZoom = Math.Clamp(config.MiniZoom, 0.25, 1);
         config.GameFps = Math.Clamp(config.GameFps, 5, 60);
         config.SpriteMs = Math.Clamp(config.SpriteMs, 220, 10000);
         return config;
