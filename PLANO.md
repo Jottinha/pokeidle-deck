@@ -25,15 +25,15 @@ Cada fase termina com o deck **compilando e testado por você nas 4 contas** ant
 - [x] Não trazer a pasta `nudes/`.
 - [x] Renomear para **DeckPokeIdle**: nome da janela, exe, pasta de dados `%LOCALAPPDATA%\DeckPokeIdle`
       (separada da do deck original, para os dois não se misturarem) e a trava de "um deck aberto por vez".
-- [x] Compilar e conferir que nada mais quebrou (compila sem erros; falta você testar nas 4 contas).
+- [x] Compilar e conferir que nada mais quebrou (testado nas 4 contas).
 
 ## Fase 2 — Barra de cima enxuta
 
-- [ ] **Esquerda:** nome do deck + layouts: **Grade** (com "Colunas" na setinha), **Principal**, **Foco**.
-- [ ] **Direita, sempre à vista:** **Ultra**, **Eco**, **Mercado** (só aparece quando a Fase 5 existir), **⚙**.
-- [ ] **Menu ⚙** junta o resto: Extensões, Sniper, Zoom, Tela cheia (F11 continua), Diagnóstico e **Sobre** (com o crédito "by: artbruno", que sai da barra de baixo, e o link do projeto original).
+- [x] **Esquerda:** nome do deck + layouts: **Grade** (com "Colunas" na setinha), **Foco**. (**Principal** entra na Fase 4.)
+- [x] **Direita, sempre à vista:** **Ultra**, **Eco**, **Mercado** (só aparece quando a Fase 5 existir), **⚙**.
+- [x] **Menu ⚙** junta o resto: Extensões, Sniper, Zoom, Tela cheia (F11 continua), Diagnóstico e **Sobre** (com o crédito "by: artbruno", que sai da barra de baixo, e o link do projeto original).
 - [ ] Saem da barra os 4 botões das contas: a troca de conta passa a ser pelas miniaturas, e o menu de cada conta
-      passa para o "⋯" do cabeçalho dela (Fase 3).
+      passa para o "⋯" do cabeçalho dela (Fase 3). Ficam na barra até lá, para não perder o acesso.
 
 ## Fase 3 — Cabeçalho de cada conta
 

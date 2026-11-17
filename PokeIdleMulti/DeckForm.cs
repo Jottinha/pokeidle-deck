@@ -35,21 +35,24 @@ internal sealed class DeckForm : Form
     private readonly ToolStrip _bar = new ClickThroughToolStrip();
     private readonly StatusStrip _status = new();
     private readonly Panel _grid = new() { Dock = DockStyle.Fill, BackColor = Theme.Back };
-    private readonly ToolStripButton _gridButton = new("Grade 2×2");
-    private readonly ToolStripButton _columnsButton = new("Colunas");
+    // Layouts: a grade (2×2 ou colunas, na setinha) e o foco. "Principal" entra na Fase 4.
+    private readonly ToolStripSplitButton _gridButton = new("Grade");
+    private readonly ToolStripMenuItem _gridItem = new("Grade 2×2");
+    private readonly ToolStripMenuItem _columnsItem = new("Colunas (lado a lado)");
     private readonly ToolStripButton _focusButton = new("Foco");
     private readonly ToolStripButton[] _accountButtons = new ToolStripButton[Accounts];
     // ⇄ e ⚡, e não 🔁 e 🔋: na barra o Windows desenha esses dois emojis como quadrados.
     private readonly ToolStripButton _echoButton = new("⇄ Eco");
     private bool _echo;
-    private readonly ToolStripButton _zoomOutButton = new("−");
-    private readonly ToolStripDropDownButton _zoomButton = new("Zoom 100%");
-    private readonly ToolStripButton _zoomInButton = new("+");
-    private readonly ToolStripButton _extensionsButton = new("🧩 Extensões");
-    private readonly ToolStripDropDownButton _sniperButton = new("🎯 Sniper") { Visible = false };
+    private readonly ToolStripSplitButton _ultraButton = new("⚡ Ultra");
+    // O menu ⚙ junta o que não precisa estar sempre à vista.
+    private readonly ToolStripDropDownButton _settingsButton = new("⚙") { ShowDropDownArrow = false };
+    private readonly ToolStripMenuItem _zoomButton = new("Zoom 100%");
+    private readonly ToolStripMenuItem _extensionsButton = new("🧩 Extensões…");
+    private readonly ToolStripMenuItem _sniperButton = new("🎯 Rotom Sniper") { Visible = false };
     private readonly bool[] _hasSniper = new bool[Accounts];
-    private readonly ToolStripButton _fullscreenButton = new("⛶ Tela cheia");
-    private readonly ToolStripSplitButton _ultraButton = new("⚡ ULTRA");
+    private readonly ToolStripMenuItem _fullscreenButton = new("Tela cheia") { ShortcutKeyDisplayString = "F11" };
+    private readonly ToolStripMenuItem _diagStatus = new("🩺 Gerar diagnóstico…");
     private readonly ToolStripStatusLabel _ram = new();
     private readonly ToolStripStatusLabel _voteStatus = new();
     private readonly VoteState?[] _votes = new VoteState?[Accounts];
@@ -142,14 +145,17 @@ internal sealed class DeckForm : Form
         _bar.Items.Add(new ToolStripLabel(AppName) { Font = new Font(_bar.Font, FontStyle.Bold), ForeColor = Theme.Accent });
         _bar.Items.Add(new ToolStripSeparator());
 
-        _gridButton.ToolTipText = "As 4 contas em grade";
-        _columnsButton.ToolTipText = "As 4 contas lado a lado";
+        // Esquerda: os layouts.
+        _gridButton.ToolTipText = "As 4 contas à vista (na setinha: em grade 2×2 ou lado a lado)";
+        _gridButton.ButtonClick += (_, _) => SetLayout(_layoutBeforeFocus);
+        _gridItem.Click += (_, _) => SetLayout(DeckLayout.Grid);
+        _columnsItem.Click += (_, _) => SetLayout(DeckLayout.Columns);
+        _gridButton.DropDownItems.AddRange(new ToolStripItem[] { _gridItem, _columnsItem });
         _focusButton.ToolTipText = "Uma conta ocupando o deck (as outras continuam rodando escondidas)";
-        _gridButton.Click += (_, _) => SetLayout(DeckLayout.Grid);
-        _columnsButton.Click += (_, _) => SetLayout(DeckLayout.Columns);
         _focusButton.Click += (_, _) => FocusPane(_config.Focused);
-        _bar.Items.AddRange(new ToolStripItem[] { _gridButton, _columnsButton, _focusButton, new ToolStripSeparator() });
+        _bar.Items.AddRange(new ToolStripItem[] { _gridButton, _focusButton, new ToolStripSeparator() });
 
+        // As contas: até as miniaturas (Fase 4) e o menu ⋯ do cabeçalho (Fase 3), a troca e o menu de cada uma ficam aqui.
         for (int i = 0; i < Accounts; i++)
         {
             int index = i;
@@ -167,45 +173,54 @@ internal sealed class DeckForm : Form
             _bar.Items.Add(button);
         }
 
+        // Direita, sempre à vista: Eco, Ultra e o menu ⚙. Itens à direita entram da direita para a esquerda.
+        _settingsButton.Alignment = _ultraButton.Alignment = _echoButton.Alignment = ToolStripItemAlignment.Right;
+        _settingsButton.Font = new Font("Segoe UI Symbol", 12f);
+        _settingsButton.ToolTipText = "Mais opções: zoom, extensões, sniper, tela cheia, diagnóstico";
+        BuildSettingsMenu();
+
+        _ultraButton.ToolTipText = Theme.Wrap("Ultra em todas as contas: o Modo ULTRA Economia do jogo. O jogo inteiro sai da tela e fica " +
+                                              "só uma caixa com o XP, o Gold, os drops e os shinies da sessão; a caça continua. " +
+                                              "Na setinha, o menos animações");
+        _ultraButton.ButtonClick += async (_, _) => await SetUltraAsync(!_config.Ultra);
+        _ultraButton.DropDownOpening += (_, _) => FillUltraMenu();
+        _ultraButton.DropDownItems.Add("…");
+        ShowUltra();
+
         _echoButton.ToolTipText = "Eco: um clique numa conta se repete nas outras (no mesmo botão)";
         _echoButton.Click += (_, _) => SetEcho(!_echo);
-        _bar.Items.Add(new ToolStripSeparator());
-        _bar.Items.Add(_echoButton);
 
-        _zoomOutButton.ToolTipText = "Diminuir o zoom de todas as contas";
-        _zoomInButton.ToolTipText = "Aumentar o zoom de todas as contas";
-        _zoomButton.ToolTipText = "Zoom de todas as contas";
-        _zoomOutButton.Font = _zoomInButton.Font = new Font(_bar.Font.FontFamily, 11f, FontStyle.Bold);
-        _zoomOutButton.Click += (_, _) => StepZoom(-1);
-        _zoomInButton.Click += (_, _) => StepZoom(1);
+        _bar.Items.Add(_settingsButton);
+        _bar.Items.Add(_ultraButton);
+        _bar.Items.Add(_echoButton);
+    }
+
+    /// <summary>O menu ⚙: zoom, extensões, sniper, tela cheia, diagnóstico e o sobre.</summary>
+    private void BuildSettingsMenu()
+    {
         _zoomButton.DropDownOpening += (_, _) => FillZoomMenu();
         _zoomButton.DropDownItems.Add("…");
-        _bar.Items.Add(new ToolStripSeparator());
-        _bar.Items.AddRange(new ToolStripItem[] { _zoomOutButton, _zoomButton, _zoomInButton });
         ShowZoom();
-
-        // Itens à direita entram da direita para a esquerda.
-        _fullscreenButton.Alignment = _extensionsButton.Alignment = ToolStripItemAlignment.Right;
-        _fullscreenButton.ToolTipText = "Tela cheia (F11)";
-        _fullscreenButton.Click += (_, _) => ToggleFullscreen();
         _extensionsButton.ToolTipText = "Instalar e gerenciar as extensões de cada conta";
         _extensionsButton.Click += (_, _) => OpenExtensions();
-        _sniperButton.Alignment = ToolStripItemAlignment.Right;
         _sniperButton.ToolTipText = "Liga ou desliga o Rotom Sniper (compras automáticas no mercado) em todas as contas";
         _sniperButton.DropDownOpening += (_, _) => FillSniperMenu();
         _sniperButton.DropDownItems.Add("…");
-        _ultraButton.Alignment = ToolStripItemAlignment.Right;
-        _ultraButton.ToolTipText = "ULTRA em todas as contas: o Modo ULTRA Economia do jogo (ULTRA Battery Saver). O jogo inteiro " +
-                                   "sai da tela e fica só uma caixa com o XP, o Gold, os drops e os shinies da sessão; a caça continua. " +
-                                   "Na setinha, o menos animações";
-        _ultraButton.ButtonClick += async (_, _) => await SetUltraAsync(!_config.Ultra);
-        _ultraButton.DropDownOpening += (_, _) => FillUltraMenu();
-        ShowUltra();
-        _ultraButton.DropDownItems.Add("…");
-        _bar.Items.Add(_fullscreenButton);
-        _bar.Items.Add(_ultraButton);
-        _bar.Items.Add(_extensionsButton);
-        _bar.Items.Add(_sniperButton);
+        _fullscreenButton.Click += (_, _) => ToggleFullscreen();
+        _diagStatus.ToolTipText = Theme.Wrap("O jogo não carrega? Gera na Área de trabalho um .zip com o log da carga de cada conta, prints e as " +
+                                             "informações do PC e da rede (sem senha, token nem cookie).");
+        _diagStatus.Click += async (_, _) => await CreateDiagnosticAsync();
+        var about = new ToolStripMenuItem("Sobre o DeckPokeIdle…");
+        about.Click += (_, _) => DeckBox.Show(this,
+            $"{AppName}\n\n" +
+            "Deck pessoal para jogar 4 contas do pokeidle.io numa janela só.\n\n" +
+            "Baseado no PokeIdleMulti, by: artbruno (licença MIT):\nhttps://github.com/artbruno35/PokeIdleMulti", Text);
+        _settingsButton.DropDownItems.AddRange(new ToolStripItem[]
+        {
+            _zoomButton, _fullscreenButton, new ToolStripSeparator(),
+            _extensionsButton, _sniperButton, new ToolStripSeparator(),
+            _diagStatus, about,
+        });
     }
 
     private void BuildStatus()
@@ -218,15 +233,6 @@ internal sealed class DeckForm : Form
         _status.Items.Add(new ToolStripStatusLabel("·") { ForeColor = Theme.Muted });
         _voteStatus.ForeColor = Theme.Muted;
         _status.Items.Add(_voteStatus);
-        _status.Items.Add(new ToolStripStatusLabel { Spring = true });
-        _diagStatus.ForeColor = Theme.Muted;
-        _diagStatus.ToolTipText = Theme.Wrap("O jogo não carrega? Gera na Área de trabalho um .zip com o log da carga de cada conta, prints e as " +
-                                             "informações do PC e da rede (sem senha, token nem cookie), para mandar a quem cuida do deck.");
-        _diagStatus.Click += async (_, _) => await CreateDiagnosticAsync();
-        _status.Items.Add(_diagStatus);
-        // A assinatura, no fim da barra de baixo.
-        _status.Items.Add(new ToolStripStatusLabel("·") { ForeColor = Theme.Muted });
-        _status.Items.Add(new ToolStripStatusLabel("by: artbruno") { ForeColor = Theme.Muted });
     }
 
     protected override async void OnShown(EventArgs e)
@@ -355,7 +361,7 @@ internal sealed class DeckForm : Form
             _fullscreen = false;
         }
         _fullscreenButton.Checked = _fullscreen;
-        _fullscreenButton.Text = _fullscreen ? "⛶ Sair da tela cheia" : "⛶ Tela cheia";
+        _fullscreenButton.Text = _fullscreen ? "Sair da tela cheia" : "Tela cheia";
         ResumeLayout();
     }
 
@@ -429,9 +435,12 @@ internal sealed class DeckForm : Form
 
     private void UpdateBar()
     {
-        _gridButton.Checked = _config.Layout == DeckLayout.Grid;
-        _columnsButton.Checked = _config.Layout == DeckLayout.Columns;
-        _focusButton.Checked = _config.Layout == DeckLayout.Focus;
+        bool grid = _config.Layout != DeckLayout.Focus;
+        _gridButton.Text = _layoutBeforeFocus == DeckLayout.Columns ? "Colunas" : "Grade";
+        _gridButton.ForeColor = grid ? Theme.Accent : Theme.Text;
+        _gridItem.Checked = _config.Layout == DeckLayout.Grid;
+        _columnsItem.Checked = _config.Layout == DeckLayout.Columns;
+        _focusButton.Checked = !grid;
         for (int i = 0; i < Accounts; i++)
         {
             _accountButtons[i].Text = _config.AccountNames[i];
@@ -1075,7 +1084,6 @@ internal sealed class DeckForm : Form
 
     // ---------- 🩺 Diagnóstico: o jogo que não carrega ----------
 
-    private readonly ToolStripStatusLabel _diagStatus = new("🩺 Gerar diagnóstico");
     private bool _diagBusy;
 
     /// <summary>O deck agora, para o relatório do diagnóstico: as contas, as opções que mexem no jogo, as lives e o consumo.</summary>
@@ -1191,14 +1199,8 @@ internal sealed class DeckForm : Form
 
     private static readonly double[] ZoomLevels = { 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5 };
 
-    /// <summary>O zoom (o mesmo em todas as contas) no botão; − e + apagam nas pontas.</summary>
-    private void ShowZoom()
-    {
-        double zoom = _config.Zoom[0];
-        _zoomButton.Text = $"Zoom {zoom * 100:0}%";
-        _zoomOutButton.Enabled = zoom > ZoomLevels[0] + 0.001;
-        _zoomInButton.Enabled = zoom < ZoomLevels[^1] - 0.001;
-    }
+    /// <summary>O zoom (o mesmo em todas as contas) no item do menu ⚙.</summary>
+    private void ShowZoom() => _zoomButton.Text = $"Zoom de todas as contas: {_config.Zoom[0] * 100:0}%";
 
     /// <summary>O − e o +: o nível de zoom anterior ou o seguinte da lista.</summary>
     private void StepZoom(int direction)
@@ -1213,6 +1215,10 @@ internal sealed class DeckForm : Form
     {
         var items = _zoomButton.DropDownItems;
         items.Clear();
+        double zoom = _config.Zoom[0];
+        items.Add(new ToolStripMenuItem("− Diminuir", null, (_, _) => StepZoom(-1)) { Enabled = zoom > ZoomLevels[0] + 0.001 });
+        items.Add(new ToolStripMenuItem("+ Aumentar", null, (_, _) => StepZoom(1)) { Enabled = zoom < ZoomLevels[^1] - 0.001 });
+        items.Add(new ToolStripSeparator());
         foreach (var level in ZoomLevels)
         {
             var item = new ToolStripMenuItem($"{level * 100:0}%") { Checked = Math.Abs(_config.Zoom[0] - level) < 0.01 };
