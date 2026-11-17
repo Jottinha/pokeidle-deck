@@ -9,10 +9,10 @@ Cada fase termina com o deck **compilando e testado por você nas 4 contas** ant
 
 ## Fase 0 — Preparação
 
-- [ ] Instalar o **.NET 8 SDK** e o **git** (`winget`).
-- [ ] Copiar o código do PokeIdleMulti para esta pasta, mantendo o `LICENSE` (o MIT exige manter o aviso do autor).
-- [ ] Compilar **sem nenhuma mudança** e abrir, para confirmar que a base funciona nesta máquina.
-- [ ] `git init` + primeiro commit ("base PokeIdleMulti"), para dar para comparar e voltar atrás em qualquer fase.
+- [x] Instalar o **.NET 8 SDK** e o **git** (`winget`).
+- [x] Copiar o código do PokeIdleMulti para esta pasta, mantendo o `LICENSE` (o MIT exige manter o aviso do autor).
+- [x] Compilar **sem nenhuma mudança** e abrir, para confirmar que a base funciona nesta máquina.
+- [x] `git init` + primeiro commit ("base PokeIdleMulti"), para dar para comparar e voltar atrás em qualquer fase.
 
 ## Fase 1 — Limpeza e identidade
 
