@@ -58,7 +58,7 @@ Cada fase termina com o deck **compilando e testado por você nas 4 contas** ant
 
 - [x] **Visual mais legível:** cores com mais contraste, cabeçalho das contas num tom próprio, layout em uso e Eco/Ultra
       ligados como "pílulas" preenchidas, a conta principal com borda roxa, fontes um pouco maiores.
-- [ ] **/hunt for PokeIdle nas 4 contas:** pelo ⚙ → Extensões → + Adicionar → Importar do meu Chrome, com "Instalar em
+- [x] **/hunt for PokeIdle nas 4 contas:** pelo ⚙ → Extensões → + Adicionar → Importar do meu Chrome, com "Instalar em
       todas as contas" ligado (o deck já faz isso; não precisa de código).
 
 ## Fase 5 — Analisador do Mercado da Comunidade (depois)
