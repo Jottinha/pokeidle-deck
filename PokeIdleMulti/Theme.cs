@@ -33,6 +33,9 @@ internal static class Theme
     public const string SoundGlyph = "";
     public const string MutedGlyph = "";
 
+    /// <summary>Os três pontos (⋯) dos ícones do Windows: o menu da conta.</summary>
+    public const string MoreGlyph = "";
+
     /// <summary>O carrinho dos ícones do Windows (a recompra).</summary>
     public const string CartGlyph = "";
 

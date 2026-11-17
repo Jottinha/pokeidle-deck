@@ -121,6 +121,7 @@ internal sealed class DeckForm : Form
             pane.SettingsChanged += OnPaneSettingsChanged;
             pane.Clicked += (p, click) => _ = EchoAsync(p, click);
             pane.PowerRequested += p => _ = SetPaneOffAsync(p.Index, !p.Off);
+            pane.MenuRequested += (p, at) => ShowAccountMenu(p.Index, at);
             pane.PopupRequested += (p, extension, anchor) => _ = OpenExtensionPopupAsync(p, extension, anchor);
             pane.VoteRequested += p => _ = OpenVoteAsync(p, null);
             pane.TopIdleLinkRequested += (p, uri) => _ = OpenVoteAsync(p, uri);
@@ -822,33 +823,59 @@ internal sealed class DeckForm : Form
 
     // ---------- Ações das contas ----------
 
-    private void ShowAccountMenu(int index)
+    /// <summary>
+    /// O menu ⋯ da conta (e o botão direito no nome dela, na barra de cima): o jogo (ampliar, recarregar, som), as
+    /// automações (recompra, PvP, voto, extensões) e a conta (renomear, apagar os dados, diagnóstico, desligar).
+    /// </summary>
+    private void ShowAccountMenu(int index, Point? at = null)
     {
         var pane = _panes[index];
-        var menu = new ContextMenuStrip();
-        menu.Items.Add(_config.Layout == DeckLayout.Focus && _config.Focused == index ? "Voltar para a grade" : "Ampliar no deck",
-            null, (_, _) => ToggleFocus(index));
-        menu.Items.Add("Recarregar limpo (sem o cache do jogo)", null, (_, _) => _ = pane.ReloadCleanAsync());
-        menu.Items.Add(pane.Muted ? "Ligar o som" : "Desligar o som", null, (_, _) => pane.SetMuted(!pane.Muted));
-        menu.Items.Add("Renomear…", null, (_, _) => RenameAccount(index));
-        menu.Items.Add(new ToolStripMenuItem("Apagar os dados da conta (entrar de novo)…", null, async (_, _) => await WipeAccountAsync(index))
+        var menu = new ContextMenuStrip { ShowItemToolTips = true };
+        if (pane.Off)
         {
-            Enabled = !pane.Off && pane.Core is not null,
-        });
-        menu.Items.Add(pane.Off ? "Ligar esta conta" : "Desligar esta conta (fica no deck, sem rodar nada)",
-            null, async (_, _) => await SetPaneOffAsync(index, !pane.Off));
-        menu.Items.Add("🩺 Gerar o diagnóstico (o arquivo para mandar quando o jogo não carrega)…", null, async (_, _) => await CreateDiagnosticAsync());
-        // O carrinho e o ⚔ também aqui: em colunas, desligados, eles saem do cabeçalho para os outros botões caberem.
-        if (!pane.Off)
-        {
+            menu.Items.Add("Ligar esta conta", null, async (_, _) => await SetPaneOffAsync(index, false));
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Recompra…", null, (_, _) => ShowRestockWindow(index));
+            menu.Items.Add("Renomear…", null, (_, _) => RenameAccount(index));
+        }
+        else
+        {
+            menu.Items.Add(_config.Layout == DeckLayout.Focus && _config.Focused == index ? "Voltar para a grade" : "Ampliar no deck",
+                null, (_, _) => ToggleFocus(index));
+            menu.Items.Add("Recarregar limpo (sem o cache do jogo)", null, (_, _) => _ = pane.ReloadCleanAsync());
+            menu.Items.Add(pane.Muted ? "Ligar o som" : "Desligar o som", null, (_, _) => pane.SetMuted(!pane.Muted));
+
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(new ToolStripMenuItem("🛒 Recompra…", null, (_, _) => ShowRestockWindow(index))
+            {
+                Checked = _config.Restock[index].On,
+            });
             var pvpMenu = new ToolStripMenuItem("⚔ Fila de PvP") { Checked = _config.Pvp[index] };
             FillPvpMenu(index, pvpMenu.DropDownItems);
             menu.Items.Add(pvpMenu);
+            if (pane.HasVote)
+                menu.Items.Add(new ToolStripMenuItem(pane.VoteText + " no TopIdle", null, (_, _) => _ = OpenVoteAsync(pane, null))
+                {
+                    ToolTipText = pane.VoteTip,
+                });
+            if (pane.Extensions.Count > 0)
+            {
+                var extensions = new ToolStripMenuItem("🧩 Extensões");
+                foreach (var extension in pane.Extensions)
+                    extensions.DropDownItems.Add(extension.Name, AccountPane.ExtensionIcon(extension), (_, _) => pane.OpenExtension(extension));
+                menu.Items.Add(extensions);
+            }
+
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("Renomear…", null, (_, _) => RenameAccount(index));
+            menu.Items.Add(new ToolStripMenuItem("Apagar os dados da conta (entrar de novo)…", null, async (_, _) => await WipeAccountAsync(index))
+            {
+                Enabled = pane.Core is not null,
+            });
+            menu.Items.Add("🩺 Gerar diagnóstico…", null, async (_, _) => await CreateDiagnosticAsync());
+            menu.Items.Add("Desligar esta conta (fica no deck, sem rodar nada)", null, async (_, _) => await SetPaneOffAsync(index, true));
         }
         menu.Closed += (_, _) => BeginInvoke(menu.Dispose);
-        menu.Show(Cursor.Position);
+        menu.Show(at ?? Cursor.Position);
     }
 
     /// <summary>

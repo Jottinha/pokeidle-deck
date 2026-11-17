@@ -37,12 +37,12 @@ Cada fase termina com o deck **compilando e testado por você nas 4 contas** ant
 
 ## Fase 3 — Cabeçalho de cada conta
 
-- [ ] **Sempre visível:** bolinha de status (verde caçando · amarelo no login ou carregando · vermelho desligada),
+- [x] **Sempre visível:** bolinha de status (verde caçando · amarelo no login ou carregando · vermelho desligada),
       nome, tempo rodando, e só 3 botões: **⟳ recarregar**, **som** e **⋯**.
-- [ ] **🛒 e ⚔ só aparecem quando estão ligados** (como indicador, clicável).
-- [ ] **Menu ⋯:** ampliar, desligar, recompra, fila de PvP, voto no TopIdle, botões das extensões,
+- [x] **🛒 e ⚔ só aparecem quando estão ligados** (como indicador, clicável).
+- [x] **Menu ⋯:** ampliar, desligar, recompra, fila de PvP, voto no TopIdle, botões das extensões,
       renomear, apagar os dados da conta, diagnóstico.
-- [ ] Os avisos ("na tela de login", "conta aberta em outro lugar") viram a cor da bolinha + a dica dela.
+- [x] Os avisos ("na tela de login", "conta aberta em outro lugar") viram a cor da bolinha + a dica dela. O voto só aparece no cabeçalho quando está liberado; o tempo que falta fica no menu ⋯.
 
 ## Fase 4 — Layout Principal (uma conta grande, 3 pequenas)
 

@@ -21,7 +21,9 @@ internal sealed class AccountPane : UserControl
     private readonly ToolStripLabel _dot = new("●");
     private readonly ToolStripLabel _name = new();
     private readonly ToolStripLabel _info = new();
-    private readonly ToolStripButton _focus = new(Theme.FocusGlyph) { Font = Theme.Symbols };
+    // O ⋯: tudo o que a conta faz (ampliar, desligar, recompra, PvP, voto, extensões, renomear…).
+    private readonly ToolStripButton _more = new(Theme.MoreGlyph) { Font = Theme.Symbols };
+    private readonly List<ExtensionInfo> _extensions = new();
     private readonly ToolStripButton _reload = new(Theme.ReloadGlyph) { Font = Theme.Symbols };
     private readonly ToolStripButton _mute = new(Theme.SoundGlyph) { Font = Theme.Symbols };
     private readonly ToolStripButton _vote = new("🗳 Votar") { Visible = false };
@@ -38,7 +40,7 @@ internal sealed class AccountPane : UserControl
         ForeColor = Theme.Muted,
     };
     private readonly Font _voteBold;
-    private readonly List<ToolStripItem> _extensionItems = new();
+
     private PaneStatus _status = PaneStatus.Starting;
     private string? _statusText = "abrindo…";
     private string? _note;
@@ -70,8 +72,17 @@ internal sealed class AccountPane : UserControl
         _info.ForeColor = Theme.Muted;
 
         // Itens à direita entram da direita para a esquerda.
-        _power.Alignment = _focus.Alignment = _reload.Alignment = _mute.Alignment =
+        // Sempre à vista: ⟳, som e ⋯. O carrinho e o ⚔ só com a recompra e a fila ligadas, o voto só liberado, e o ⏻ só
+        // com a conta desligada (para ligar); o resto fica no ⋯.
+        _power.Alignment = _more.Alignment = _reload.Alignment = _mute.Alignment =
             _vote.Alignment = _restock.Alignment = _pvp.Alignment = ToolStripItemAlignment.Right;
+        _power.Available = false;
+        _more.ToolTipText = "Mais opções desta conta: ampliar, desligar, recompra, fila de PvP, voto, extensões, renomear…";
+        _more.Click += (_, _) =>
+        {
+            var bounds = _more.Bounds;
+            MenuRequested?.Invoke(this, _header.PointToScreen(new Point(bounds.Left, bounds.Bottom)));
+        };
         _restock.Click += (_, _) => RestockRequested?.Invoke(this);
         ShowRestock(null);
         _pvp.Click += (_, _) => PvpRequested?.Invoke(this);
@@ -82,20 +93,17 @@ internal sealed class AccountPane : UserControl
                 PvpMenuRequested?.Invoke(this);
         };
         ShowPvp(null);
-        _power.ToolTipText = "Desligar esta conta: o jogo, as extensões e o voto dela param (ela continua aqui no deck)";
         _power.Click += (_, _) => PowerRequested?.Invoke(this);
-        _focus.ToolTipText = "Ampliar esta conta / voltar (duplo clique no cabeçalho faz o mesmo)";
         _reload.ToolTipText = "Recarregar limpo: apaga o cache do jogo (e os service workers do site) e recarrega. O login e as extensões ficam";
         _mute.ToolTipText = "Ligar / desligar o som desta conta";
         _voteBold = new Font(_header.Font, FontStyle.Bold);
-        _focus.Click += (_, _) => FocusRequested?.Invoke(this);
         _reload.Click += (_, _) => ReloadRequested?.Invoke(this);
         _mute.Click += (_, _) => SetMuted(!Muted);
         _vote.Click += (_, _) => VoteRequested?.Invoke(this);
         _header.DoubleClick += (_, _) => FocusRequested?.Invoke(this);
         _header.SizeChanged += (_, _) => FitHeader();
-        _header.Items.AddRange(new ToolStripItem[] { _dot, _name, _info, _power, _focus, _reload, _mute, _restock, _pvp, _vote });
-        foreach (var item in new ToolStripItem[] { _power, _focus, _reload, _mute, _restock, _pvp, _vote })
+        _header.Items.AddRange(new ToolStripItem[] { _dot, _name, _info, _more, _power, _mute, _reload, _pvp, _restock, _vote });
+        foreach (var item in new ToolStripItem[] { _more, _power, _mute, _reload, _pvp, _restock, _vote })
             Roomy(item);
 
         _offNote.Font = new Font(Font.FontFamily, 11f);
@@ -125,6 +133,27 @@ internal sealed class AccountPane : UserControl
     /// <summary>O botão ⏻: ligar ou desligar a conta.</summary>
     public event Action<AccountPane>? PowerRequested;
 
+    /// <summary>O ⋯ do cabeçalho: o deck abre o menu da conta neste ponto da tela.</summary>
+    public event Action<AccountPane, Point>? MenuRequested;
+
+    /// <summary>As extensões desta conta que têm popup (o deck põe no menu ⋯).</summary>
+    public IReadOnlyList<ExtensionInfo> Extensions => _extensions;
+
+    /// <summary>Abre o popup de uma extensão encostado no ⋯ do cabeçalho.</summary>
+    public void OpenExtension(ExtensionInfo extension)
+    {
+        var bounds = _more.Bounds;
+        PopupRequested?.Invoke(this, extension, _header.PointToScreen(new Point(bounds.Right, bounds.Bottom)));
+    }
+
+    /// <summary>O texto do voto (liberado ou quanto falta) e a dica, para o menu ⋯.</summary>
+    public string VoteText => _voteText;
+
+    public string VoteTip => _vote.ToolTipText ?? "";
+
+    /// <summary>O voto já foi conferido nesta conta (o menu ⋯ só mostra o item com o que dizer).</summary>
+    public bool HasVote { get; private set; }
+
     /// <summary>O carrinho do cabeçalho: abrir a recompra desta conta.</summary>
     public event Action<AccountPane>? RestockRequested;
 
@@ -150,8 +179,7 @@ internal sealed class AccountPane : UserControl
     public PaneStatus Status => _status;
     public DateTime? StartedAt { get; private set; }
     public bool Muted => Core?.IsMuted ?? false;
-    public int ExtensionButtonCount => _extensionItems.Count;
-    public string? VoteText => _vote.Visible ? _voteText : null;
+    public int ExtensionButtonCount => _extensions.Count;
 
     /// <summary>O diagnóstico da carga desta conta (diagnostico\contaN.log; o deck cria, null: sem log).</summary>
     public PaneDiag? Diag { get; set; }
@@ -959,17 +987,20 @@ internal sealed class AccountPane : UserControl
             return;
         }
         _voteText = text;
+        HasVote = true;
         _vote.Text = _voteShort ? VoteIcon(text) : text;
         _vote.ForeColor = color;
         _vote.Font = highlight ? _voteBold : _header.Font;
         _vote.ToolTipText = tooltip;
-        _vote.Visible = true;
+        // No cabeçalho só o voto liberado (é um aviso); o tempo que falta fica no menu ⋯.
+        _vote.Visible = highlight;
         // Depois de mostrar (e do negrito): a conta do espaço tem de ver o voto do tamanho que ele vai ter.
         FitHeader();
     }
 
     public void HideVote()
     {
+        HasVote = false;
         _vote.Visible = false;
         FitHeader();
     }
@@ -992,13 +1023,11 @@ internal sealed class AccountPane : UserControl
                         "Clique no botão de ligar, no canto direito do cabeçalho, para ligar.";
         _offNote.Visible = off;
         WebView.Visible = !off;
-        _reload.Visible = _mute.Visible = _restock.Visible = _pvp.Visible = !off;
-        foreach (var item in _extensionItems)
-            item.Visible = !off;
-        _power.ToolTipText = off
-            ? "Ligar esta conta: o jogo abre de novo, com as extensões dela"
-            : "Desligar esta conta: o jogo, as extensões e o voto dela param (ela continua aqui no deck)";
-        _power.ForeColor = off ? Theme.Accent : Theme.Text;
+        _reload.Available = _mute.Available = !off;
+        // Desligada, o ⏻ aparece para ligar; ligada, desligar fica no menu ⋯.
+        _power.Available = off;
+        _power.ToolTipText = "Ligar esta conta: o jogo abre de novo, com as extensões dela";
+        _power.ForeColor = Theme.Accent;
         if (off)
         {
             HideVote();
@@ -1010,6 +1039,7 @@ internal sealed class AccountPane : UserControl
         {
             SetStatus(PaneStatus.Starting, "ligando…");
         }
+        FitHeader();
     }
 
     /// <summary>O texto de status do cabeçalho ("desligada", "carregando…"), para o autoteste.</summary>
@@ -1023,62 +1053,35 @@ internal sealed class AccountPane : UserControl
         RefreshHeader();
     }
 
-    /// <summary>Um botão no cabeçalho para cada extensão desta conta que tem popup.</summary>
+    /// <summary>As extensões desta conta que têm popup: ficam no menu ⋯ (com o ícone de cada uma).</summary>
     public void SetExtensions(IEnumerable<ExtensionInfo> extensions)
     {
-        foreach (var item in _extensionItems)
-        {
-            _header.Items.Remove(item);
-            item.Dispose();
-        }
-        _extensionItems.Clear();
-
-        foreach (var extension in extensions)
-        {
-            var button = new ToolStripButton
-            {
-                Alignment = ToolStripItemAlignment.Right,
-                ToolTipText = extension.Name,
-                DisplayStyle = ToolStripItemDisplayStyle.Image,
-                Visible = !Off,
-            };
-            var icon = LoadIcon(extension);
-            if (icon is null)
-            {
-                button.DisplayStyle = ToolStripItemDisplayStyle.Text;
-                button.Text = "🧩";
-            }
-            else
-            {
-                button.Image = icon;
-            }
-            Roomy(button);
-            button.Click += (_, _) =>
-            {
-                var bounds = button.Bounds;
-                PopupRequested?.Invoke(this, extension, _header.PointToScreen(new Point(bounds.Right, bounds.Bottom)));
-            };
-            _extensionItems.Add(button);
-            _header.Items.Add(button);
-        }
-        FitHeader();
+        _extensions.Clear();
+        _extensions.AddRange(extensions);
     }
 
-    /// <summary>Atualiza nome, bolinha de status e o tempo rodando (chamado a cada segundo).</summary>
+    /// <summary>O ícone de uma extensão para o menu (null: sem ícone).</summary>
+    public static Image? ExtensionIcon(ExtensionInfo extension) => LoadIcon(extension);
+
+    /// <summary>
+    /// Atualiza nome, bolinha de status e o tempo rodando (chamado a cada segundo). A bolinha: verde caçando, amarela
+    /// carregando ou na tela de login, vermelha desligada ou com erro; a dica dela diz o porquê.
+    /// </summary>
     public void RefreshHeader()
     {
         _name.Text = AccountName;
-        _dot.ForeColor = _status switch
-        {
-            PaneStatus.Ok => Theme.Ok,
-            PaneStatus.Loading => Theme.Warn,
-            PaneStatus.Failed => Theme.Bad,
-            _ => Theme.Muted,
-        };
+        _dot.ForeColor = Off || _status == PaneStatus.Failed ? Theme.Bad
+            : _loginScreen || _status != PaneStatus.Ok || _statusText is not null ? Theme.Warn
+            : Theme.Ok;
+        _dot.ToolTipText = Off ? "Desligada"
+            : _status == PaneStatus.Failed ? "Com erro: " + _statusText
+            : _loginScreen ? "Na tela de login: entre na conta ou desligue-a (parada ali ela vai juntando memória)"
+            : _statusText is not null ? Capitalize(_statusText)
+            : _status == PaneStatus.Ok ? "No jogo" : "Abrindo…";
         var info = DateTime.Now < _noteUntil ? "· " + _note
             : _statusText is not null ? "· " + _statusText
-            : _loginScreen ? "· na tela de login: entre ou desligue a conta"
-            : StartedAt is DateTime started ? "· rodando há " + FormatUptime(DateTime.Now - started)
+            : _loginScreen ? "· na tela de login"
+            : StartedAt is DateTime started ? "· " + FormatUptime(DateTime.Now - started)
             : "";
         if (_info.Text != info)
         {
@@ -1086,6 +1089,8 @@ internal sealed class AccountPane : UserControl
             FitHeader();
         }
     }
+
+    private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpper(text[0]) + text[1..];
 
     private void SetStatus(PaneStatus status, string? text)
     {
@@ -1117,10 +1122,8 @@ internal sealed class AccountPane : UserControl
     private void UpdateMuteButton() => _mute.Text = Muted ? Theme.MutedGlyph : Theme.SoundGlyph;
 
     /// <summary>
-    /// Conta estreita (em colunas): primeiro o voto fica só com o 🗳 (o tempo continua na dica e na barra de baixo),
-    /// depois sai o "rodando há", os botões perdem a folga, e por último saem os desligados: o ⚔ e o carrinho (ficam no
-    /// menu da conta, na barra de cima), para nenhum outro sumir por falta de espaço. Com
-    /// espaço de novo, tudo volta.
+    /// Conta estreita (em colunas): primeiro o voto fica só com o 🗳, depois sai o tempo rodando e por último os botões
+    /// perdem a folga, para nenhum sumir por falta de espaço. Com espaço de novo, tudo volta.
     /// </summary>
     private void FitHeader()
     {
@@ -1142,17 +1145,15 @@ internal sealed class AccountPane : UserControl
         SetShortVote(false);
         _info.Available = true;
         _fitted = (RestockConfig.On, PvpOn);
-        _restock.Available = _pvp.Available = !Off;
+        // O carrinho e o ⚔ só aparecem ligados (como aviso, clicáveis); desligados, ficam no menu ⋯.
+        _restock.Available = !Off && RestockConfig.On;
+        _pvp.Available = !Off && PvpOn;
         if (Over())
             SetShortVote(true);
         if (Over())
             _info.Available = false;
         if (Over())
             buttons.ForEach(b => Roomy(b, tight: true));
-        if (Over() && !PvpOn)
-            _pvp.Available = false;
-        if (Over() && !RestockConfig.On)
-            _restock.Available = false;
         _header.PerformLayout();
     }
 
