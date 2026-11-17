@@ -64,14 +64,18 @@ internal sealed class AccountPane : UserControl
         Padding = new Padding(1);
 
         Theme.Style(_header);
+        // Um degrau mais claro que a barra do deck: o cabeçalho é da conta, não da janela.
+        _header.BackColor = Theme.Header;
         _header.Dock = DockStyle.Top;
-        _header.Padding = new Padding(6, 2, 4, 2);
+        _header.Padding = new Padding(8, 3, 4, 3);
         _header.CanOverflow = false;
         // Letra e ícones maiores que o padrão de 9 pt: com 4 contas na tela, os botões ficavam pequenos demais.
         _header.Font = new Font("Segoe UI", 10f);
         _header.ImageScalingSize = new Size(20, 20);
         _dot.ForeColor = Theme.Muted;
-        _name.Font = new Font(_header.Font, FontStyle.Bold);
+        _dot.Font = new Font("Segoe UI", 13f);
+        _dot.Margin = new Padding(0, 0, 2, 2);
+        _name.Font = new Font("Segoe UI Semibold", 10.5f);
         _info.ForeColor = Theme.Muted;
 
         // Itens à direita entram da direita para a esquerda.
@@ -164,6 +168,22 @@ internal sealed class AccountPane : UserControl
     }
 
     private bool _compact;
+
+    /// <summary>A conta principal do layout Principal: borda roxa mais grossa, para ver de longe qual é a grande.</summary>
+    public bool Highlighted
+    {
+        get => _highlighted;
+        set
+        {
+            if (_highlighted == value)
+                return;
+            _highlighted = value;
+            BackColor = value ? Theme.Accent : Theme.Border;
+            Padding = new Padding(value ? 2 : 1);
+        }
+    }
+
+    private bool _highlighted;
 
     /// <summary>O ritmo da sessão do jogo ("202M XP/h · 516k gold/h"), lido da página; null sem o jogo ou sem a sessão.</summary>
     public string? Stats { get; private set; }

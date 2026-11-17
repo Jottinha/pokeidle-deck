@@ -3,18 +3,41 @@ namespace PokeIdleMulti;
 /// <summary>Cores do deck (tema escuro) e o desenho das barras.</summary>
 internal static class Theme
 {
-    public static readonly Color Back = Color.FromArgb(17, 17, 23);
-    public static readonly Color Bar = Color.FromArgb(25, 25, 33);
-    public static readonly Color Hover = Color.FromArgb(44, 44, 58);
-    public static readonly Color Border = Color.FromArgb(48, 48, 62);
-    public static readonly Color Accent = Color.FromArgb(124, 92, 255);
-    public static readonly Color AccentDim = Color.FromArgb(58, 48, 110);
-    public static readonly Color Text = Color.FromArgb(228, 228, 238);
-    public static readonly Color Muted = Color.FromArgb(138, 138, 158);
-    public static readonly Color Ok = Color.FromArgb(46, 204, 113);
-    public static readonly Color Warn = Color.FromArgb(241, 196, 15);
-    public static readonly Color Bad = Color.FromArgb(231, 76, 60);
-    public static readonly Color Vote = Color.FromArgb(255, 152, 0);
+    // Fundo bem escuro entre as contas, barras um degrau acima e o cabeçalho das contas mais um: cada camada se
+    // separa da outra sem precisar de linhas. Texto quase branco e o cinza das legendas claro o bastante para ler.
+    public static readonly Color Back = Color.FromArgb(11, 12, 17);
+    public static readonly Color Bar = Color.FromArgb(24, 26, 35);
+    public static readonly Color Header = Color.FromArgb(31, 34, 46);
+    public static readonly Color Hover = Color.FromArgb(52, 57, 76);
+    public static readonly Color Border = Color.FromArgb(52, 56, 74);
+    public static readonly Color Accent = Color.FromArgb(132, 112, 255);
+    public static readonly Color AccentDim = Color.FromArgb(64, 54, 128);
+    public static readonly Color Text = Color.FromArgb(242, 243, 248);
+    public static readonly Color Muted = Color.FromArgb(172, 177, 197);
+    public static readonly Color Ok = Color.FromArgb(52, 211, 120);
+    public static readonly Color Warn = Color.FromArgb(250, 204, 21);
+    public static readonly Color Bad = Color.FromArgb(244, 94, 80);
+    public static readonly Color Vote = Color.FromArgb(255, 160, 40);
+
+    /// <summary>A fonte das barras: um pouco maior que o padrão de 9 pt, para ler de longe.</summary>
+    public static readonly Font BarFont = new("Segoe UI", 10f);
+
+    /// <summary>
+    /// Botão da barra desenhado como "pílula" preenchida: <see cref="Pill.Active"/> o layout em uso (roxo),
+    /// <see cref="Pill.On"/> uma opção ligada (verde, como o Eco e o Ultra). Vai no Tag do item.
+    /// </summary>
+    public enum Pill { Active, On }
+
+    private static readonly Color OnFill = Color.FromArgb(22, 120, 74);
+
+    /// <summary>Marca (ou desmarca) um item como pílula.</summary>
+    public static void SetPill(ToolStripItem item, Pill? pill)
+    {
+        if (Equals(item.Tag, pill))
+            return;
+        item.Tag = pill;
+        item.Invalidate();
+    }
 
     public static ToolStripRenderer Renderer { get; } = new DarkRenderer();
 
@@ -88,22 +111,77 @@ internal static class Theme
         strip.ForeColor = Text;
     }
 
+    private static System.Drawing.Drawing2D.GraphicsPath Rounded(Rectangle r, int radius)
+    {
+        var path = new System.Drawing.Drawing2D.GraphicsPath();
+        int d = radius * 2;
+        path.AddArc(r.X, r.Y, d, d, 180, 90);
+        path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
+
     private sealed class DarkRenderer : ToolStripProfessionalRenderer
     {
         public DarkRenderer() : base(new DarkColors()) => RoundedEdges = false;
 
         protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
         {
-            // Itens sem cor própria (inclusive os dos menus) usam o texto claro do tema.
+            // Itens sem cor própria (inclusive os dos menus) usam o texto claro do tema; a pílula, branco.
             e.TextColor = !e.Item.Enabled ? Muted
+                : e.Item.Tag is Pill ? Color.White
                 : e.Item.ForeColor == SystemColors.ControlText ? Text
                 : e.Item.ForeColor;
             base.OnRenderItemText(e);
         }
 
+        /// <summary>A pílula: fundo arredondado preenchido, um pouco mais claro com o mouse em cima.</summary>
+        private static bool DrawPill(Graphics g, ToolStripItem item)
+        {
+            if (item.Tag is not Pill pill)
+                return false;
+            var fill = pill == Pill.Active ? Accent : OnFill;
+            if (item.Selected || item.Pressed)
+                fill = ControlPaint.Light(fill, 0.2f);
+            var r = new Rectangle(1, 2, item.Width - 3, item.Height - 5);
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using var path = Rounded(r, 6);
+            using var brush = new SolidBrush(fill);
+            g.FillPath(brush, path);
+            return true;
+        }
+
+        protected override void OnRenderButtonBackground(ToolStripItemRenderEventArgs e)
+        {
+            if (!DrawPill(e.Graphics, e.Item))
+                base.OnRenderButtonBackground(e);
+        }
+
+        protected override void OnRenderDropDownButtonBackground(ToolStripItemRenderEventArgs e)
+        {
+            if (!DrawPill(e.Graphics, e.Item))
+                base.OnRenderDropDownButtonBackground(e);
+        }
+
+        protected override void OnRenderSplitButtonBackground(ToolStripItemRenderEventArgs e)
+        {
+            if (e.Item is not ToolStripSplitButton split || !DrawPill(e.Graphics, e.Item))
+            {
+                base.OnRenderSplitButtonBackground(e);
+                return;
+            }
+            // A setinha por cima da pílula, separada do botão por uma linha clara.
+            var arrow = split.DropDownButtonBounds;
+            using (var pen = new Pen(Color.FromArgb(90, 255, 255, 255)))
+                e.Graphics.DrawLine(pen, arrow.Left, arrow.Top + 6, arrow.Left, arrow.Bottom - 7);
+            DrawArrow(new ToolStripArrowRenderEventArgs(e.Graphics, split, arrow, Color.White, ArrowDirection.Down));
+        }
+
         protected override void OnRenderArrow(ToolStripArrowRenderEventArgs e)
         {
-            e.ArrowColor = Text;
+            e.ArrowColor = e.Item?.Tag is Pill ? Color.White : Text;
             base.OnRenderArrow(e);
         }
     }

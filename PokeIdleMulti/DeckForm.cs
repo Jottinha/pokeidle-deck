@@ -14,7 +14,7 @@ internal sealed class DeckForm : Form
     internal const string AppName = "DeckPokeIdle";
     private const string GameUrl = "https://pokeidle.io/app";
     private const int Accounts = 4;
-    private const int Gap = 4;
+    private const int Gap = 6;
 
     // Sem isso o navegador desacelera as contas escondidas, minimizadas ou atrás de outras janelas.
     // --process-per-site: as páginas do mesmo site num perfil dividem um processo. Cada conta é um perfil, e
@@ -149,7 +149,8 @@ internal sealed class DeckForm : Form
     private void BuildBar()
     {
         Theme.Style(_bar);
-        _bar.Padding = new Padding(6, 3, 6, 3);
+        _bar.Padding = new Padding(8, 5, 8, 5);
+        _bar.Font = Theme.BarFont;
         _bar.Items.Add(new ToolStripLabel(AppName) { Font = new Font(_bar.Font, FontStyle.Bold), ForeColor = Theme.Accent });
         _bar.Items.Add(new ToolStripSeparator());
 
@@ -192,6 +193,11 @@ internal sealed class DeckForm : Form
         _bar.Items.Add(_settingsButton);
         _bar.Items.Add(_ultraButton);
         _bar.Items.Add(_echoButton);
+        // Os menus que descem da barra na mesma letra dela.
+        foreach (var item in _bar.Items.OfType<ToolStripDropDownItem>())
+            item.DropDown.Font = Theme.BarFont;
+        foreach (var item in _settingsButton.DropDownItems.OfType<ToolStripDropDownItem>())
+            item.DropDown.Font = Theme.BarFont;
     }
 
     /// <summary>O menu ⚙: zoom, extensões, sniper, tela cheia, diagnóstico e o sobre.</summary>
@@ -226,6 +232,8 @@ internal sealed class DeckForm : Form
     {
         Theme.Style(_status);
         _status.SizingGrip = false;
+        _status.Font = Theme.BarFont;
+        _status.Padding = new Padding(8, 2, 8, 2);
         _status.ShowItemToolTips = true;
         _ram.ForeColor = Theme.Muted;
         _summary.ForeColor = Theme.Muted;
@@ -453,6 +461,7 @@ internal sealed class DeckForm : Form
         {
             bool mini = _config.Layout == DeckLayout.Main && pane.Index != _config.MainAccount;
             pane.Compact = mini;
+            pane.Highlighted = _config.Layout == DeckLayout.Main && pane.Index == _config.MainAccount;
             double zoom = mini ? _config.MiniZoom : _config.Zoom[pane.Index];
             if (Math.Abs(pane.WebView.ZoomFactor - zoom) > 0.001)
                 pane.WebView.ZoomFactor = zoom;
@@ -506,12 +515,12 @@ internal sealed class DeckForm : Form
     {
         var layout = _config.Layout;
         _gridButton.Text = _lastGrid == DeckLayout.Columns ? "Colunas" : "Grade";
-        _gridButton.ForeColor = Wide(layout) ? Theme.Accent : Theme.Text;
+        Theme.SetPill(_gridButton, Wide(layout) ? Theme.Pill.Active : null);
         _gridItem.Checked = layout == DeckLayout.Grid;
         _columnsItem.Checked = layout == DeckLayout.Columns;
-        _mainButton.ForeColor = layout == DeckLayout.Main ? Theme.Accent : Theme.Text;
+        Theme.SetPill(_mainButton, layout == DeckLayout.Main ? Theme.Pill.Active : null);
         _mainButton.Text = layout == DeckLayout.Main ? "Principal: " + _config.AccountNames[_config.MainAccount] : "Principal";
-        _focusButton.ForeColor = layout == DeckLayout.Focus ? Theme.Accent : Theme.Text;
+        Theme.SetPill(_focusButton, layout == DeckLayout.Focus ? Theme.Pill.Active : null);
         _focusButton.Text = layout == DeckLayout.Focus ? "Foco: " + _config.AccountNames[_config.Focused] : "Foco";
         UpdateSummary();
     }
@@ -833,8 +842,8 @@ internal sealed class DeckForm : Form
     /// <summary>O ⚡ ULTRA na barra: laranja com "ligado", como o eco.</summary>
     private void ShowUltra()
     {
-        _ultraButton.Text = _config.Ultra ? "⚡ ULTRA ligado" : "⚡ ULTRA";
-        _ultraButton.ForeColor = _config.Ultra ? Theme.Vote : Theme.Text;
+        _ultraButton.Text = _config.Ultra ? "⚡ Ultra ligado" : "⚡ Ultra";
+        Theme.SetPill(_ultraButton, _config.Ultra ? Theme.Pill.On : null);
     }
 
     /// <summary>O ULTRA (o mesmo do botão) e, embaixo, o menos animações.</summary>
@@ -953,7 +962,7 @@ internal sealed class DeckForm : Form
     private void ShowAccountMenu(int index, Point? at = null)
     {
         var pane = _panes[index];
-        var menu = new ContextMenuStrip { ShowItemToolTips = true };
+        var menu = new ContextMenuStrip { ShowItemToolTips = true, Font = Theme.BarFont };
         if (pane.Off)
         {
             menu.Items.Add("Ligar esta conta", null, async (_, _) => await SetPaneOffAsync(index, false));
@@ -1384,7 +1393,7 @@ internal sealed class DeckForm : Form
     {
         _echo = on;
         _echoButton.Text = on ? "⇄ Eco ligado" : "⇄ Eco";
-        _echoButton.ForeColor = on ? Theme.Vote : Theme.Text;
+        Theme.SetPill(_echoButton, on ? Theme.Pill.On : null);
     }
 
     /// <summary>

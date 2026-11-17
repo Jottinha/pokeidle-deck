@@ -54,6 +54,7 @@ Cada fase termina com o deck **compilando e testado por você nas 4 contas** ant
       "Sessão" do jogo, ou da caixa do Ultra), lidos da página da conta. O gold/h é o bruto: a caixa do Ultra não mostra o lucro.
 - [x] **Barra de baixo como resumo:** "4 contas: 3 caçando, 1 no login" · RAM total · quais contas podem votar.
 
+## Ajustes depois da Fase 4- [x] **Visual mais legível:** cores com mais contraste, cabeçalho das contas num tom próprio, layout em uso e Eco/Ultra      ligados como "pílulas" preenchidas, a conta principal com borda roxa, fontes um pouco maiores.- [ ] **/hunt for PokeIdle nas 4 contas:** pelo ⚙ → Extensões → + Adicionar → Importar do meu Chrome, com "Instalar em      todas as contas" ligado (o deck já faz isso; não precisa de código).
 ## Fase 5 — Analisador do Mercado da Comunidade (depois)
 
 Só leitura e aviso. **Nenhuma compra automática** — comprar fica sempre com você.
