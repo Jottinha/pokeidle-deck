@@ -151,6 +151,12 @@ internal sealed class ExtensionStore
         Save();
     }
 
+    /// <summary>
+    /// As extensões que o próprio motor do navegador (Edge WebView2) põe em todo perfil: a área de transferência e o
+    /// leitor de PDF. Não dá para remover nem precisa mexer nelas, então a lista do deck não mostra.
+    /// </summary>
+    public static bool IsBuiltIn(string id) => id is "dgiklkfkllikcanfonkcabmbdfmgleag" or "mhjfbmdgcfjbbpaeojofohoefgiehjai";
+
     public static IReadOnlyList<ChromeExtension> FindChromeExtensions()
     {
         var userData = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

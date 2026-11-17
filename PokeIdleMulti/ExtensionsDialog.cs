@@ -163,6 +163,8 @@ internal sealed class ExtensionsDialog : Form
                 return;
             foreach (var extension in await profile.GetBrowserExtensionsAsync())
             {
+                if (ExtensionStore.IsBuiltIn(extension.Id))
+                    continue;
                 var item = new ListViewItem(extension.Name) { Checked = extension.IsEnabled, Tag = extension, UseItemStyleForSubItems = false };
                 var info = _store.Find(extension.Id);
                 item.SubItems.Add(info is null ? "" : ExtensionStore.VersionOf(info.Folder) ?? "", Ui.Muted, Color.Empty, Ui.Font);
@@ -205,9 +207,22 @@ internal sealed class ExtensionsDialog : Form
     private async Task InstallAsync(string folder)
     {
         var targets = _allAccounts.Checked ? _panes.ToList() : Selected is { } selected ? new List<AccountPane> { selected } : new();
+        // Conta desligada (ou ainda abrindo) não tem o navegador: sem ele não dá para instalar. Antes saía calado.
+        var skipped = targets.Where(p => p.Profile is null).Select(p => p.AccountName).ToList();
         ExtensionInfo? info = null;
         foreach (var pane in targets.Where(p => p.Profile is not null))
             info = await _store.InstallAsync(pane.Profile!, folder);
+        if (info is null)
+        {
+            DeckBox.Show(this,
+                "Nada foi instalado: " + (skipped.Count > 0
+                    ? $"{string.Join(", ", skipped)} está desligada ou ainda abrindo. Ligue a conta, espere o jogo abrir e tente de novo."
+                    : "escolha uma conta no alto da janela."), Text, DeckBoxIcon.Warn);
+            return;
+        }
+        if (skipped.Count > 0)
+            DeckBox.Show(this, $"Não instalei em {string.Join(", ", skipped)}: a conta está desligada ou ainda abrindo. " +
+                               "Ligue e instale de novo nela.", Text, DeckBoxIcon.Warn);
         await RefreshListAsync();
         _changed();
         if (info is not null)
@@ -233,7 +248,16 @@ internal sealed class ExtensionsDialog : Form
         if (Pick(list, "Importar do Chrome", "Marque as extensões do seu Chrome que vão para a conta.", "Importar", new Size(440, 380)) != DialogResult.OK)
             return;
 
-        foreach (int index in list.CheckedIndices.Cast<int>().ToList())
+        // Marcada na caixinha ou só selecionada na linha: as duas valem (antes, só selecionar não importava nada).
+        var chosen = list.CheckedIndices.Cast<int>().ToList();
+        if (chosen.Count == 0)
+            chosen = list.SelectedIndices.Cast<int>().ToList();
+        if (chosen.Count == 0)
+        {
+            DeckBox.Show(this, "Nenhuma extensão marcada: marque a caixinha ao lado da que vai para a conta.", Text, DeckBoxIcon.Warn);
+            return;
+        }
+        foreach (int index in chosen)
             await InstallAsync(_store.ImportFromChrome(available[index]));
     }
 
