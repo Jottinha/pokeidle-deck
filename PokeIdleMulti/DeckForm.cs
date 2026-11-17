@@ -74,6 +74,7 @@ internal sealed class DeckForm : Form
     public DeckForm()
     {
         _root = DataRoot;
+        Directory.CreateDirectory(_root);
         _configPath = Path.Combine(_root, "deck.json");
         _config = DeckConfig.Load(_configPath);
         // O consumo.log só começa 10 min depois de abrir, quando tudo já carregou.

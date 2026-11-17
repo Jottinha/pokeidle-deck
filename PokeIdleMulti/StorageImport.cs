@@ -254,7 +254,9 @@ internal static class StorageImport
         var path = QueuePath(root);
         if (pending.Count == 0)
         {
-            File.Delete(path);
+            // Na primeira abertura a pasta do deck ainda nem existe: File.Delete falharia.
+            if (File.Exists(path))
+                File.Delete(path);
             return;
         }
         Directory.CreateDirectory(root);
