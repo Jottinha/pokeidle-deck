@@ -1,144 +1,157 @@
+using System.Text.Json;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.WinForms;
+
 namespace PokeIdleMulti;
 
 /// <summary>
-/// A janela do analisador do Mercado da Comunidade (botão Mercado na barra de cima). Lê o mercado pela conta escolhida
-/// (o mercado.js da página dela pede ao servidor as mesmas leituras da tela do mercado) e lista as oportunidades de
-/// revenda, com o lucro estimado em gold depois da taxa. SÓ LÊ: o deck nunca compra nem anuncia; quem compra é você, no
-/// jogo. Duplo clique numa linha explica a conta.
+/// A janela do analisador do Mercado da Comunidade (botão $ Mercado na barra de cima): uma página em cartões
+/// (mercado.html) com as oportunidades separadas em "Ganhar gemas" e "Ganhar gold". Lê o mercado pela conta principal
+/// (ou pela primeira no jogo, se a principal não estiver) e, em "Abrir no jogo", leva a conta escolhida até o item no
+/// mercado do jogo. SÓ LÊ: o deck nunca compra nem anuncia.
 /// </summary>
 internal sealed class MarketWindow : Form
 {
+    private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
     private readonly Func<IReadOnlyList<AccountPane>> _panes;
-    private readonly UiSelect _account = new() { Width = 180 };
-    private readonly UiButton _refresh = new("Atualizar", UiLook.Primary);
-    private readonly UiSwitch _auto = new("Atualizar sozinho a cada 1 min");
-    private readonly UiStepper _minPercent = new() { Minimum = 0, Maximum = 1000, Increment = 5, Value = 10, Width = 110 };
-    private readonly UiStepper _minSales = new() { Minimum = 0, Maximum = 100000, Increment = 1, Value = 3, Width = 110 };
-    private readonly Label _status = Ui.Label("Clique em Atualizar para ler o mercado.", muted: true);
-    private readonly UiList _list = new(26) { FillLast = true };
+    private readonly Func<int> _preferred;
+    private readonly Action<int> _bringToFront;
+    private readonly CoreWebView2Environment _env;
+    private readonly WebView2 _view = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = Theme.Back };
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 60_000 };
-    private Market.Snapshot? _last;
+    private int _openAccount;
     private bool _busy;
 
-    private sealed record AccountChoice(AccountPane Pane)
+    /// <param name="preferred">A conta principal agora (a de leitura e a primeira da lista de "abrir no jogo").</param>
+    /// <param name="bringToFront">Põe a conta à vista no deck (a principal do layout Principal, ou o foco).</param>
+    public MarketWindow(CoreWebView2Environment env, Func<IReadOnlyList<AccountPane>> panes, Func<int> preferred, Action<int> bringToFront)
     {
-        public override string ToString() => Pane.AccountName;
-    }
-
-    public MarketWindow(Func<IReadOnlyList<AccountPane>> panes, int preferred)
-    {
+        _env = env;
         _panes = panes;
+        _preferred = preferred;
+        _bringToFront = bringToFront;
+        _openAccount = preferred();
         Text = "Mercado da Comunidade · oportunidades";
-        Ui.Dialog(this);
-        FormBorderStyle = FormBorderStyle.Sizable;
-        MaximizeBox = true;
-        MinimumSize = new Size(820, 420);
-        ClientSize = new Size(1000, 600);
-        ShowInTaskbar = true;
-
-        // Linha 1: de qual conta ler, atualizar e o automático; o estado da última leitura.
-        var row1 = Row();
-        row1.Controls.Add(Centered(Ui.Label("Ler pela conta")));
-        row1.Controls.Add(_account);
-        row1.Controls.Add(_refresh);
-        row1.Controls.Add(Centered(_auto));
-        var top1 = new Panel { Dock = DockStyle.Top, Height = 40 };
-        top1.Controls.Add(row1);
-
-        // Linha 2: os filtros.
-        var row2 = Row();
-        row2.Controls.Add(Centered(Ui.Label("Lucro mínimo (%)")));
-        row2.Controls.Add(_minPercent);
-        row2.Controls.Add(Centered(Ui.Label("Vendidos em 7 dias, no mínimo")));
-        row2.Controls.Add(_minSales);
-        var top2 = new Panel { Dock = DockStyle.Top, Height = 40 };
-        top2.Controls.Add(row2);
-
-        _status.AutoSize = false;
-        _status.Dock = DockStyle.Top;
-        _status.Height = 26;
-        _status.TextAlign = ContentAlignment.MiddleLeft;
-
-        _list.Columns.Add("Item", 200);
-        _list.Columns.Add("Oportunidade", 160);
-        _list.Columns.Add("Comprar por", 130, HorizontalAlignment.Right);
-        _list.Columns.Add("Revender por", 130, HorizontalAlignment.Right);
-        _list.Columns.Add("Lucro (gold)", 130, HorizontalAlignment.Right);
-        _list.Columns.Add("%", 70, HorizontalAlignment.Right);
-        _list.Columns.Add("Vendidos 7d", 90, HorizontalAlignment.Right);
-        _list.DoubleClick += (_, _) => ExplainSelected();
-
-        var close = new UiButton("Fechar", UiLook.Outline);
-        close.Click += (_, _) => Close();
-        CancelButton = close;
-        var footer = new UiFooter("Só lê o mercado: o deck nunca compra nem anuncia. Duplo clique numa linha explica a conta.", close);
-
-        var body = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14, 10, 14, 10) };
-        body.Controls.Add(new UiFrame(_list) { Dock = DockStyle.Fill });
-        body.Controls.Add(Ui.Gap(6, DockStyle.Top));
-        body.Controls.Add(_status);
-        body.Controls.Add(top2);
-        body.Controls.Add(top1);
-        Controls.Add(body);
-        Controls.Add(footer);
-
-        FillAccounts(preferred);
-        _refresh.Click += async (_, _) => await RefreshAsync();
-        _auto.CheckedChanged += (_, _) => _timer.Enabled = _auto.Checked;
+        Icon = Theme.AppIcon;
+        BackColor = Theme.Back;
+        StartPosition = FormStartPosition.CenterParent;
+        MinimumSize = new Size(760, 480);
+        Size = new Size(1240, 800);
+        Controls.Add(_view);
         _timer.Tick += async (_, _) => await RefreshAsync();
-        _minPercent.ValueChanged += (_, _) => Fill();
-        _minSales.ValueChanged += (_, _) => Fill();
-        Shown += async (_, _) => await RefreshAsync();
+        Shown += async (_, _) => await StartAsync();
     }
 
-    private static FlowLayoutPanel Row() => new()
+    protected override void OnHandleCreated(EventArgs e)
     {
-        Dock = DockStyle.Fill,
-        FlowDirection = FlowDirection.LeftToRight,
-        WrapContents = false,
-        Padding = new Padding(0, 4, 0, 0),
-    };
-
-    private static Control Centered(Control control)
-    {
-        control.Margin = new Padding(0, 6, 10, 0);
-        return control;
+        base.OnHandleCreated(e);
+        Theme.DarkTitleBar(this);
     }
 
-    /// <summary>As contas ligadas; começa pela <paramref name="preferred"/> (a principal) se ela estiver ligada.</summary>
-    private void FillAccounts(int preferred)
+    private async Task StartAsync()
     {
-        _account.Items.Clear();
-        foreach (var pane in _panes().Where(p => !p.Off))
-            _account.Items.Add(new AccountChoice(pane));
-        int index = _account.Items.Cast<AccountChoice>().ToList().FindIndex(c => c.Pane.Index == preferred);
-        _account.SelectedIndex = _account.Items.Count == 0 ? -1 : Math.Max(0, index);
+        try
+        {
+            await _view.EnsureCoreWebView2Async(_env);
+        }
+        catch (Exception ex)
+        {
+            DeckBox.Show(this, "Não consegui abrir a janela do mercado.\n\n" + ex.Message, Text, DeckBoxIcon.Error);
+            Close();
+            return;
+        }
+        var core = _view.CoreWebView2;
+        core.Settings.AreDevToolsEnabled = false;
+        core.Settings.AreDefaultContextMenusEnabled = false;
+        core.Settings.IsStatusBarEnabled = false;
+        core.WebMessageReceived += (_, e) => _ = OnMessageAsync(e.WebMessageAsJson);
+        // Links da página (nenhum hoje) nunca navegam a janela para fora.
+        core.NavigationStarting += (_, e) =>
+        {
+            if (!e.Uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase) && e.Uri != "about:blank")
+                e.Cancel = true;
+        };
+        core.NavigateToString(Market.Page);
     }
 
-    /// <summary>Pede uma leitura nova pela conta escolhida e espera a resposta (até 8 s).</summary>
+    private void Post(object message)
+    {
+        if (_view.CoreWebView2 is { } core && !IsDisposed)
+            core.PostWebMessageAsJson(JsonSerializer.Serialize(message, Json));
+    }
+
+    private void Toast(string text) => Post(new { type = "toast", text });
+
+    private async Task OnMessageAsync(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var m = doc.RootElement;
+        switch (m.TryGetProperty("cmd", out var c) ? c.GetString() : null)
+        {
+            case "ready":
+                SendAccounts();
+                await RefreshAsync();
+                break;
+            case "refresh":
+                await RefreshAsync();
+                break;
+            case "auto":
+                _timer.Enabled = m.TryGetProperty("on", out var on) && on.ValueKind == JsonValueKind.True;
+                break;
+            case "account":
+                if (m.TryGetProperty("index", out var i) && i.TryGetInt32(out int index))
+                    _openAccount = index;
+                break;
+            case "open":
+                if (m.TryGetProperty("itemId", out var item) && item.TryGetInt32(out int itemId))
+                {
+                    bool gems = m.TryGetProperty("gems", out var g) && g.ValueKind == JsonValueKind.True;
+                    int account = m.TryGetProperty("account", out var a) && a.TryGetInt32(out int ac) ? ac : _openAccount;
+                    await OpenInGameAsync(account, itemId, gems);
+                }
+                break;
+        }
+    }
+
+    /// <summary>A lista do "Abrir no jogo em": as contas ligadas, começando pela escolhida (a principal).</summary>
+    private void SendAccounts()
+    {
+        var accounts = _panes().Where(p => !p.Off).Select(p => new { index = p.Index, name = p.AccountName }).ToList();
+        if (accounts.Count > 0 && accounts.All(a => a.index != _openAccount))
+            _openAccount = accounts[0].index;
+        Post(new { type = "accounts", accounts, selected = _openAccount });
+    }
+
+    /// <summary>A conta de leitura: a principal, ou a primeira no jogo se a principal não estiver.</summary>
+    private AccountPane? ReadingPane()
+    {
+        var panes = _panes();
+        int preferred = _preferred();
+        return panes.Where(p => p.Index == preferred && p.Health == PaneHealth.Ok)
+            .Concat(panes.Where(p => p.Health == PaneHealth.Ok))
+            .FirstOrDefault();
+    }
+
+    /// <summary>Pede uma leitura nova e espera a resposta (até 8 s).</summary>
     private async Task RefreshAsync()
     {
-        if (_busy || IsDisposed)
+        if (_busy || IsDisposed || _view.CoreWebView2 is null)
             return;
-        if (_account.SelectedItem is not AccountChoice { Pane: var pane })
+        var pane = ReadingPane();
+        if (pane is null)
         {
-            _status.Text = "Nenhuma conta ligada para ler o mercado.";
+            Status("<span class=\"warn\">Nenhuma conta está no jogo agora: entre numa conta e clique em Atualizar.</span>");
             return;
         }
         _busy = true;
-        _refresh.Enabled = false;
-        _status.Text = $"Lendo o mercado por {pane.AccountName}…";
+        Post(new { type = "busy", on = true });
         try
         {
             var before = Market.Parse(await pane.RunGameScriptAsync(Market.SummaryScript));
             if (before is null)
             {
-                _status.Text = $"{pane.AccountName} ainda não tem o leitor do mercado: recarregue a conta (⟳ no cabeçalho) e tente de novo.";
-                return;
-            }
-            if (!before.Connected)
-            {
-                _status.Text = $"{pane.AccountName} não está conectada ao jogo (tela de login ou carregando). Escolha outra conta.";
+                Status($"<span class=\"warn\">{Esc(pane.AccountName)} ainda não tem o leitor do mercado: recarregue a conta (⟳ no cabeçalho) e clique em Atualizar.</span>");
                 return;
             }
             await pane.RunGameScriptAsync(Market.ScanScript);
@@ -154,68 +167,72 @@ internal sealed class MarketWindow : Form
                 return;
             if (snapshot.At is null)
             {
-                _status.Text = "O jogo não respondeu à leitura do mercado. Tente de novo em alguns segundos.";
+                Status("<span class=\"warn\">O jogo não respondeu à leitura do mercado. Tente de novo em alguns segundos.</span>");
                 return;
             }
-            _last = snapshot;
-            Fill();
+            string gem = snapshot.GemValue is double v ? $"1 gema ≈ <b>{Market.GoldShort(v)} gold</b>" : "valor da gema: sem vendas nas duas moedas";
+            Status($"Lido às <b>{snapshot.At:HH:mm:ss}</b> pela <b>{Esc(pane.AccountName)}</b> · {gem} · " +
+                   $"{snapshot.ItemsWithListings} itens à venda · taxa de venda {snapshot.GoldTax:P0} em gold e 15% em gemas");
+            Post(new { type = "data", chances = snapshot.Chances });
         }
         catch (Exception ex)
         {
-            _status.Text = "Não consegui ler o mercado: " + ex.Message;
+            Status($"<span class=\"warn\">Não consegui ler o mercado: {Esc(ex.Message)}</span>");
         }
         finally
         {
             _busy = false;
-            if (!IsDisposed)
-                _refresh.Enabled = true;
+            Post(new { type = "busy", on = false });
         }
     }
 
-    /// <summary>A lista com os filtros de agora (sem ler o mercado de novo).</summary>
-    private void Fill()
+    /// <summary>
+    /// Leva a conta até o item no mercado do jogo: põe a conta à vista no deck, sai do Ultra (que esconde o jogo) e faz
+    /// na página os cliques de abrir o mercado, a aba Itens, o item e a moeda. Não compra.
+    /// </summary>
+    private async Task OpenInGameAsync(int account, int itemId, bool gems)
     {
-        if (_last is not { } snapshot)
-            return;
-        double minPercent = (double)_minPercent.Value / 100;
-        int minSales = (int)_minSales.Value;
-        var shown = snapshot.Chances.Where(c => c.Percent >= minPercent && c.Sales7d >= minSales).ToList();
-
-        _list.BeginUpdate();
-        _list.Items.Clear();
-        foreach (var c in shown)
+        var pane = _panes().FirstOrDefault(p => p.Index == account);
+        if (pane is null || pane.Off)
         {
-            var item = new ListViewItem(c.Item) { Tag = c, UseItemStyleForSubItems = false };
-            item.SubItems.Add(c.Kind, c.Kind.StartsWith("Abaixo") ? Ui.Text : Ui.Accent, Color.Empty, Ui.Font);
-            item.SubItems.Add(c.Buy);
-            item.SubItems.Add(c.Sell);
-            item.SubItems.Add(c.ProfitGold > 0 ? Market.N(c.ProfitGold) : "?", Ui.Ok, Color.Empty, Ui.Bold);
-            item.SubItems.Add($"{c.Percent * 100:0}%");
-            item.SubItems.Add(c.Sales7d.ToString("N0", System.Globalization.CultureInfo.GetCultureInfo("pt-BR")), Ui.Muted, Color.Empty, Ui.Font);
-            _list.Items.Add(item);
-        }
-        _list.EndUpdate();
-        _list.FitLastColumn();
-
-        string gem = snapshot.GemValue is double v ? $"1 gema ≈ {Market.Gold(v)}" : "valor da gema: sem vendas nas duas moedas";
-        _status.Text = $"Lido às {snapshot.At:HH:mm:ss} · {snapshot.ItemsWithListings} itens à venda · {gem} · " +
-                       $"{shown.Count} de {snapshot.Chances.Count} oportunidades com os filtros · taxa de venda: {snapshot.GoldTax:P0} em gold, 15% em gemas";
-    }
-
-    private void ExplainSelected()
-    {
-        if (_list.SelectedItems.Count == 0 || _list.SelectedItems[0].Tag is not MarketChance c)
+            Toast("Essa conta está desligada.");
             return;
-        DeckBox.Show(this,
-            $"{c.Item}: {c.Kind}\n\n{c.Explain}\n\n" +
-            "É uma estimativa: o preço pode mudar até você comprar, e revender depende de alguém comprar. " +
-            $"Para conferir e comprar, abra no jogo o Mercado da Comunidade (botão RMT) → Itens e procure \"{c.Item}\".",
-            Text);
+        }
+        if (pane.Health != PaneHealth.Ok)
+        {
+            Toast($"{pane.AccountName} não está no jogo agora.");
+            return;
+        }
+        _bringToFront(account);
+        if (pane.Ultra)
+            await pane.SetUltraAsync(false);
+        await Task.Delay(400);
+        if (await pane.RunGameScriptAsync(Market.OpenScript(itemId, gems)) is not "true")
+        {
+            Toast($"{pane.AccountName} ainda não tem o leitor do mercado: recarregue a conta (⟳).");
+            return;
+        }
+        Toast($"Abrindo em {pane.AccountName}…");
+        for (int i = 0; i < 30 && !IsDisposed; i++)
+        {
+            await Task.Delay(300);
+            var s = Market.Parse(await pane.RunGameScriptAsync(Market.SummaryScript));
+            if (s?.LastOpen is string result && result != "abrindo")
+            {
+                Toast(result == "ok" ? $"Pronto: o item está aberto no mercado da {pane.AccountName}." : $"Não deu para abrir: {result}.");
+                return;
+            }
+        }
     }
+
+    private void Status(string html) => Post(new { type = "status", html });
+
+    private static string Esc(string text) => System.Net.WebUtility.HtmlEncode(text);
 
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         _timer.Dispose();
+        _view.Dispose();
         base.OnFormClosed(e);
     }
 }

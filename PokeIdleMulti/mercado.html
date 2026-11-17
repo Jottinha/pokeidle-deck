@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Mercado</title>
+<style>
+  :root {
+    --bg: #0b0c11; --panel: #181a23; --card: #1f2230; --card2: #262a3a; --line: #343850;
+    --text: #f2f3f8; --muted: #acb1c5; --faint: #7d8299;
+    --accent: #8470ff; --gem: #e879f9; --gem-bg: rgba(232,121,249,.12); --gold: #f5b942; --gold-bg: rgba(245,185,66,.12);
+    --ok: #34d378;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 "Segoe UI", system-ui, sans-serif; }
+  body { padding: 14px 16px 20px; }
+  button, select { font: inherit; color: inherit; }
+
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 10px; }
+  header h1 { font-size: 18px; font-weight: 600; margin: 0; }
+  .grow { flex: 1; }
+  .ctl { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  select { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
+  .btn { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 14px; cursor: pointer; }
+  .btn:hover { background: var(--card2); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .btn.primary:hover { filter: brightness(1.12); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .switch { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--muted); user-select: none; }
+  .switch i { width: 30px; height: 16px; border-radius: 8px; background: var(--line); position: relative; transition: background .15s; }
+  .switch i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 10px; height: 10px; border-radius: 50%; background: #fff; transition: left .15s; }
+  .switch.on i { background: var(--ok); }
+  .switch.on i::after { left: 17px; }
+
+  .status { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+  .status b { color: var(--text); font-weight: 600; }
+  .status .warn { color: #facc15; }
+
+  .filters { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-bottom: 14px; color: var(--muted); font-size: 13px; }
+  .chips { display: inline-flex; gap: 4px; }
+  .chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 3px 11px; cursor: pointer; }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 1100px) { .cols { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+  section.gem { border-color: rgba(232,121,249,.45); }
+  section h2 { display: flex; align-items: center; gap: 8px; margin: 2px 4px 10px; font-size: 16px; font-weight: 600; }
+  section h2 img { width: 22px; height: 22px; }
+  section h2 .count { margin-left: auto; font-size: 12px; color: var(--muted); font-weight: 400; }
+  section h2 .tag { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--gem-bg); color: var(--gem); font-weight: 600; }
+  .sub { color: var(--faint); font-size: 12px; margin: -6px 4px 10px; }
+
+  .card { display: grid; grid-template-columns: 44px 1fr auto; gap: 4px 12px; align-items: center; background: var(--card);
+          border: 1px solid transparent; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; }
+  .card:hover { border-color: var(--line); background: var(--card2); }
+  .icon { width: 44px; height: 44px; border-radius: 10px; background: #12141c; display: grid; place-items: center; grid-row: span 2; }
+  .icon img { width: 34px; height: 34px; image-rendering: pixelated; }
+  .name { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kind { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+  .gem .kind { background: var(--gem-bg); color: var(--gem); }
+  .gold .kind { background: var(--gold-bg); color: var(--gold); }
+  .flow { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+  .money { display: inline-flex; align-items: center; gap: 4px; color: var(--text); font-weight: 600; }
+  .money img { width: 15px; height: 15px; }
+  .arrow { color: var(--faint); }
+  .profit { grid-row: span 2; text-align: right; }
+  .profit .big { font-size: 20px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; }
+  .gem .profit .big { color: var(--gem); }
+  .gold .profit .big { color: var(--gold); }
+  .profit .big img { width: 18px; height: 18px; }
+  .profit .unit { color: var(--faint); font-size: 11px; }
+  .pct { display: inline-block; margin-top: 3px; font-size: 12px; font-weight: 600; color: var(--ok); background: rgba(52,211,120,.12);
+         padding: 1px 8px; border-radius: 999px; }
+  .meta { grid-column: 2 / 4; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; color: var(--faint); font-size: 12px; }
+  .meta .go { margin-left: auto; }
+  .go { background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 3px 10px; cursor: pointer; color: var(--text); font-size: 12px; }
+  .go:hover { background: var(--accent); border-color: var(--accent); }
+  .explain { display: none; grid-column: 1 / 4; color: var(--muted); font-size: 13px; background: #161821; border-radius: 8px; padding: 8px 10px; margin-top: 6px; }
+  .card.open .explain { display: block; }
+  .empty { color: var(--faint); text-align: center; padding: 26px 10px; }
+  .toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--card2); border: 1px solid var(--line);
+           border-radius: 10px; padding: 8px 16px; color: var(--text); opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  footer { color: var(--faint); font-size: 12px; margin-top: 14px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Mercado da Comunidade</h1>
+  <div class="grow"></div>
+  <label class="ctl">Abrir no jogo em <select id="account"></select></label>
+  <span class="switch" id="auto"><i></i>Atualizar a cada 1 min</span>
+  <button class="btn primary" id="refresh">Atualizar</button>
+</header>
+<div class="status" id="status">Lendo o mercado…</div>
+<div class="filters">
+  <span>Lucro mínimo <span class="chips" id="minPct"></span></span>
+  <span>Vendidos em 7 dias <span class="chips" id="minSales"></span></span>
+</div>
+<div class="cols">
+  <section class="gem">
+    <h2><img id="gemIcon" alt="">Ganhar gemas <span class="tag">mais importante</span><span class="count" id="gemCount"></span></h2>
+    <p class="sub">Revender em gemas, ou comprar com gold e revender em gemas. O lucro é em gemas, por unidade.</p>
+    <div id="gems"></div>
+  </section>
+  <section class="gold">
+    <h2><img id="goldIcon" alt="">Ganhar gold<span class="count" id="goldCount"></span></h2>
+    <p class="sub">Revender em gold, ou comprar com gemas e revender em gold. O lucro é em gold, por unidade.</p>
+    <div id="golds"></div>
+  </section>
+</div>
+<footer>O deck só lê o mercado: ele nunca compra nem anuncia. "Abrir no jogo" leva a conta até o item; a compra é com você.</footer>
+<div class="toast" id="toast"></div>
+
+<script>
+  const GEM = 'https://pokeidle.io/img/moeda-gema.png';
+  const GOLD = 'https://pokeidle.io/assets/site/assets/ui/moeda-ouro.png';
+  const FALLBACK = 'https://pokeidle.io/assets/site/assets/ui/menu-bolsa.png';
+  document.getElementById('gemIcon').src = GEM;
+  document.getElementById('goldIcon').src = GOLD;
+
+  const post = (msg) => window.chrome?.webview?.postMessage(msg);
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const br = new Intl.NumberFormat('pt-BR');
+  const gems = (v) => (v < 100 ? v.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : br.format(Math.round(v)));
+  const goldShort = (v) => v >= 1e9 ? (v / 1e9).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 'B'
+    : v >= 1e6 ? (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 'M'
+    : v >= 1e3 ? (v / 1e3).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 'k' : br.format(Math.round(v));
+  const money = (v, cur) => `<span class="money"><img src="${cur === 'gemas' ? GEM : GOLD}" alt="">${cur === 'gemas' ? gems(v) : goldShort(v)}</span>`;
+
+  let data = null;
+  const state = { minPct: 10, minSales: 3 };
+  try { Object.assign(state, JSON.parse(localStorage.getItem('deckMercado') || '{}')); } catch { }
+  const save = () => { try { localStorage.setItem('deckMercado', JSON.stringify(state)); } catch { } };
+
+  function chips(id, values, key, label) {
+    const box = $(id);
+    box.innerHTML = values.map((v) => `<span class="chip ${state[key] === v ? 'on' : ''}" data-v="${v}">${label(v)}</span>`).join('');
+    box.onclick = (e) => {
+      const c = e.target.closest('.chip');
+      if (!c) return;
+      state[key] = Number(c.dataset.v);
+      save();
+      chips(id, values, key, label);
+      render();
+    };
+  }
+  chips('minPct', [0, 5, 10, 20, 50], 'minPct', (v) => v === 0 ? 'qualquer' : v + '%');
+  chips('minSales', [1, 3, 10, 30], 'minSales', (v) => v + '+');
+
+  function card(c) {
+    const pct = Math.round(c.percent * 100);
+    return `<div class="card ${c.gems ? 'gem' : 'gold'}" data-item="${c.itemId}" data-gems="${c.gems}">
+      <div class="icon"><img src="${esc(c.icon || FALLBACK)}" alt="" onerror="this.src='${FALLBACK}'"></div>
+      <div class="name"><span>${esc(c.item)}</span><em class="kind">${esc(c.kind)}</em></div>
+      <div class="profit">
+        <div class="big">+${c.gems ? gems(c.profit) : goldShort(c.profit)}<img src="${c.gems ? GEM : GOLD}" alt=""></div>
+        <div class="unit">por unidade</div>
+        <div class="pct">+${pct}%</div>
+      </div>
+      <div class="flow">Compre por ${money(c.buy, c.buyCurrency)} <span class="arrow">→</span> revenda por ${money(c.sell, c.sellCurrency)}</div>
+      <div class="meta"><span>${esc(c.note)}</span><span>${br.format(c.sales7d)} vendidos em 7 dias</span>
+        <button class="go" data-open="1">Abrir no jogo ›</button></div>
+      <div class="explain">${esc(c.explain)}</div>
+    </div>`;
+  }
+
+  function render() {
+    if (!data) return;
+    const ok = (c) => c.percent * 100 >= state.minPct && c.sales7d >= state.minSales;
+    const g = data.chances.filter((c) => c.gems && ok(c));
+    const o = data.chances.filter((c) => !c.gems && ok(c));
+    const empty = (txt) => `<div class="empty">${txt}</div>`;
+    $('gems').innerHTML = g.length ? g.map(card).join('') : empty('Nenhuma oportunidade de gemas com esses filtros agora.');
+    $('golds').innerHTML = o.length ? o.map(card).join('') : empty('Nenhuma oportunidade de gold com esses filtros agora.');
+    $('gemCount').textContent = g.length ? `${g.length} de ${data.chances.filter((c) => c.gems).length}` : '';
+    $('goldCount').textContent = o.length ? `${o.length} de ${data.chances.filter((c) => !c.gems).length}` : '';
+  }
+
+  document.body.addEventListener('click', (e) => {
+    const cardEl = e.target.closest('.card');
+    if (!cardEl) return;
+    if (e.target.closest('[data-open]')) {
+      post({ cmd: 'open', itemId: Number(cardEl.dataset.item), gems: cardEl.dataset.gems === 'true', account: Number($('account').value) });
+      return;
+    }
+    cardEl.classList.toggle('open');
+  });
+  $('refresh').onclick = () => post({ cmd: 'refresh' });
+  $('auto').onclick = () => { $('auto').classList.toggle('on'); post({ cmd: 'auto', on: $('auto').classList.contains('on') }); };
+  $('account').onchange = () => post({ cmd: 'account', index: Number($('account').value) });
+
+  let toastTimer = 0;
+  function toast(text) {
+    const t = $('toast');
+    t.textContent = text;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+  }
+
+  window.chrome?.webview?.addEventListener('message', (e) => {
+    const m = e.data;
+    if (m.type === 'busy') { $('refresh').disabled = m.on; $('refresh').textContent = m.on ? 'Lendo…' : 'Atualizar'; return; }
+    if (m.type === 'toast') return toast(m.text);
+    if (m.type === 'accounts') {
+      $('account').innerHTML = m.accounts.map((a) => `<option value="${a.index}" ${a.index === m.selected ? 'selected' : ''}>${esc(a.name)}</option>`).join('');
+      return;
+    }
+    if (m.type === 'status') { $('status').innerHTML = m.html; return; }
+    if (m.type === 'data') { data = m; render(); }
+  });
+  post({ cmd: 'ready' });
+</script>
+</body>
+</html>

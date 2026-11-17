@@ -73,7 +73,9 @@ Só leitura e aviso. **Nenhuma compra automática** — comprar fica sempre com 
   - **Abaixo da média (gold ou gemas):** o menor anúncio abaixo da média de 7 dias, já descontada a taxa de quem revende.
   - **Gold → gemas** e **gemas → gold:** o mesmo item mais barato numa moeda do que vale na outra, com a gema convertida
     pelo valor que o próprio mercado dá a ela (mediana de média em gold ÷ média em gemas).
-- [x] Lista ordenada pelo lucro estimado em gold, com filtros de lucro mínimo (%) e de vendidos em 7 dias; duplo clique
+- [x] Janela em cartões, separada em **Ganhar gemas** (em destaque) e **Ganhar gold**, com ícone do item, lucro por
+      unidade, filtros de lucro mínimo e de vendidos em 7 dias, e **Abrir no jogo** (leva a conta escolhida até o item no
+      mercado do jogo, sem comprar). Lê sempre pela conta principal (ou a primeira no jogo); clique no cartão
       explica a conta.
 - [ ] **Pokémon:** o mesmo pokémon com atributos parecidos (IV, P5, nível) bem abaixo dos outros (mais difícil: cada
       pokémon é diferente; fica para uma próxima versão).

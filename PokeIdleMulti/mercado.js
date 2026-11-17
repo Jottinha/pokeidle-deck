@@ -78,20 +78,84 @@
     return true;
   }
 
+  // Os ícones dos itens (o mesmo arquivo que o jogo usa), para os cartões da janela do deck.
+  let icons = null;
+  function loadIcons() {
+    if (icons) return;
+    icons = {};
+    fetch('/assets/items-icons.json')
+      .then((r) => r.json())
+      .then((j) => { icons = j || {}; })
+      .catch(() => { icons = null; });
+  }
+
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function until(fn, ms = 4000) {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const v = fn();
+      if (v) return v;
+      await wait(120);
+    }
+    return null;
+  }
+  let lastOpen = null;
+
+  // Leva a tela do jogo até o item no Mercado da Comunidade, com os mesmos cliques que a pessoa faria: abre o mercado,
+  // a aba Itens, todas as categorias, o item e a moeda. Não compra: a compra continua no botão do jogo.
+  async function open(itemId, moeda) {
+    const q = (s) => document.querySelector(s);
+    const menu = q('button[data-modal="community"]');
+    if (!menu) return 'o botão do mercado não está na tela (a conta está no jogo?)';
+    if (!q('#cm-lista')) menu.click();
+    if (!(await until(() => q('#cm-lista')))) return 'o mercado não abriu';
+    const tipo = await until(() => q('.cm-filtro[data-tipo="item"]'), 2500);
+    if (tipo && !tipo.classList.contains('on')) tipo.click();
+    const cat = await until(() => q('.cm-filtro[data-cat=""]'), 1500);
+    if (cat && !cat.classList.contains('on')) cat.click();
+    let row = await until(() => q(`.cmi-linha[data-item="${Number(itemId)}"]`), 2500);
+    if (!row) {
+      // Um filtro (a busca, "ocultar sem estoque") pode esconder o item: limpa e tenta de novo.
+      q('#cm-limpar')?.click();
+      await wait(300);
+      q('.cm-filtro[data-tipo="item"]:not(.on)')?.click();
+      row = await until(() => q(`.cmi-linha[data-item="${Number(itemId)}"]`), 2500);
+    }
+    if (!row) return 'não achei o item na lista do mercado';
+    row.scrollIntoView({ block: 'center' });
+    row.click();
+    const sw = await until(() => q(`[data-swmoeda="${moeda === 'orb' ? 'orb' : 'gold'}"]`), 2500);
+    if (sw && !sw.classList.contains('on')) sw.click();
+    return 'ok';
+  }
+
   window.__deckMercado = {
     /** Pede o resumo de todos os itens (menor preço e média de 7 dias). false: sem conexão ou cedo demais. */
     scan: () => send({ t: 'market.itens' }),
+    /** Abre o item no mercado do jogo; o resultado fica em summary().lastOpen. */
+    open(itemId, moeda) {
+      lastOpen = { at: Date.now(), result: 'abrindo' };
+      open(itemId, moeda)
+        .then((result) => { lastOpen = { at: Date.now(), result }; })
+        .catch((e) => { lastOpen = { at: Date.now(), result: String(e) }; });
+      return true;
+    },
     /** Pede os anúncios de um item numa moeda ('gold' ou 'orb'). */
     listings: (itemId, moeda) => send({ t: 'market.item', itemId: Number(itemId), moeda: moeda === 'orb' ? 'orb' : 'gold' }),
     /** O que o deck lê. */
     summary() {
       late();
+      loadIcons();
+      const ids = new Set(catalog.map((i) => String(i.id)));
+      const itemIcons = {};
+      if (icons) for (const [id, rel] of Object.entries(icons)) if (ids.has(id)) itemIcons[id] = rel;
       return {
         connected: socket?.readyState === 1,
         taxGoldPct,
         catalog,
+        icons: itemIcons,
         items,
-        listings,
+        lastOpen,
       };
     },
   };

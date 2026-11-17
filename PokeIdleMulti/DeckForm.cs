@@ -968,15 +968,31 @@ internal sealed class DeckForm : Form
             _marketWindow.Activate();
             return;
         }
-        int preferred = _config.Layout switch
+        if (_env is null)
         {
-            DeckLayout.Main => _config.MainAccount,
-            DeckLayout.Focus => _config.Focused,
-            _ => Array.FindIndex(_panes, p => p.Health == PaneHealth.Ok),
-        };
-        _marketWindow = new MarketWindow(() => _panes, preferred);
+            DeckBox.Show(this, "O deck ainda está abrindo as contas: tente de novo em alguns segundos.", Text);
+            return;
+        }
+        _marketWindow = new MarketWindow(_env, () => _panes, MarketAccount, ShowAccountForMarket);
         _marketWindow.FormClosed += (_, _) => _marketWindow = null;
         _marketWindow.Show(this);
+    }
+
+    /// <summary>A conta do mercado: a principal (a do layout Principal, ou a do foco); na grade, a primeira no jogo.</summary>
+    private int MarketAccount() => _config.Layout switch
+    {
+        DeckLayout.Main => _config.MainAccount,
+        DeckLayout.Focus => _config.Focused,
+        _ => Math.Max(0, Array.FindIndex(_panes, p => p.Health == PaneHealth.Ok)),
+    };
+
+    /// <summary>"Abrir no jogo": a conta escolhida fica à vista (vira a principal, ou o foco); na grade já está.</summary>
+    private void ShowAccountForMarket(int index)
+    {
+        if (_config.Layout == DeckLayout.Main && _config.MainAccount != index)
+            SetMain(index);
+        else if (_config.Layout == DeckLayout.Focus && _config.Focused != index)
+            FocusPane(index);
     }
 
     // ---------- Ações das contas ----------
