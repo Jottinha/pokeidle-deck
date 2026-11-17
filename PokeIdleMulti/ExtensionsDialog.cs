@@ -245,13 +245,10 @@ internal sealed class ExtensionsDialog : Form
         list.Columns.Add("Extensão", 0);
         foreach (var extension in available)
             list.Items.Add(extension.Name);
-        if (Pick(list, "Importar do Chrome", "Marque as extensões do seu Chrome que vão para a conta.", "Importar", new Size(440, 380)) != DialogResult.OK)
+        // Marcada na caixinha ou só selecionada na linha: as duas valem.
+        var chosen = Pick(list, "Importar do Chrome", "Marque as extensões do seu Chrome que vão para a conta.", "Importar", new Size(440, 380));
+        if (chosen is null)
             return;
-
-        // Marcada na caixinha ou só selecionada na linha: as duas valem (antes, só selecionar não importava nada).
-        var chosen = list.CheckedIndices.Cast<int>().ToList();
-        if (chosen.Count == 0)
-            chosen = list.SelectedIndices.Cast<int>().ToList();
         if (chosen.Count == 0)
         {
             DeckBox.Show(this, "Nenhuma extensão marcada: marque a caixinha ao lado da que vai para a conta.", Text, DeckBoxIcon.Warn);
@@ -319,12 +316,13 @@ internal sealed class ExtensionsDialog : Form
             list.Items.Add(item);
         }
         list.Items[0].Selected = true;
-        if (Pick(list, $"Trazer configurações para {target.AccountName}",
-                $"De onde vêm as configurações de \"{extension.Name}\"? As que {target.AccountName} tem hoje ficam guardadas num backup.",
-                "Trazer", new Size(540, 320)) != DialogResult.OK || list.SelectedIndices.Count == 0)
+        var picked = Pick(list, $"Trazer configurações para {target.AccountName}",
+            $"De onde vêm as configurações de \"{extension.Name}\"? As que {target.AccountName} tem hoje ficam guardadas num backup.",
+            "Trazer", new Size(540, 320));
+        if (picked is not { Count: > 0 })
             return;
 
-        var chosen = sources[list.SelectedIndices[0]];
+        var chosen = sources[picked[0]];
         StorageImport.Queue(_root, new PendingImport(extension.Id, chosen.Folder, chosen.Label, target.ProfileName));
         DeckBox.Show(this,
             $"Combinado: as configurações de \"{extension.Name}\" vindas de {chosen.Label} entram em {target.AccountName} " +
@@ -348,7 +346,24 @@ internal sealed class ExtensionsDialog : Form
     }
 
     /// <summary>Uma caixinha com um texto em cima, a lista e o botão de confirmar (no tema do deck).</summary>
-    private DialogResult Pick(UiList list, string title, string hint, string verb, Size size)
+    /// <summary>
+    /// Abre a escolha numa janelinha e devolve as linhas escolhidas (as marcadas na caixinha; sem nenhuma marcada, as
+    /// selecionadas), ou null se cancelou. A leitura é feita antes de a janela fechar: fechada, ela leva a lista junto e
+    /// os índices já não valem (era o "Index was out of range").
+    /// </summary>
+    private List<int>? Pick(UiList list, string title, string hint, string verb, Size size)
+    {
+        List<int> chosen = new();
+        var result = ShowPick(list, title, hint, verb, size, () =>
+        {
+            chosen = list.CheckedIndices.Cast<int>().ToList();
+            if (chosen.Count == 0)
+                chosen = list.SelectedIndices.Cast<int>().ToList();
+        });
+        return result == DialogResult.OK ? chosen : null;
+    }
+
+    private DialogResult ShowPick(UiList list, string title, string hint, string verb, Size size, Action read)
     {
         using var pick = new Form { Text = title };
         Ui.Dialog(pick);
@@ -367,6 +382,8 @@ internal sealed class ExtensionsDialog : Form
         pick.AcceptButton = ok;
         pick.CancelButton = cancel;
         list.DoubleClick += (_, _) => pick.DialogResult = DialogResult.OK;
+        // Ainda com a janela (e a lista) de pé: lê o que foi escolhido.
+        pick.FormClosing += (_, _) => read();
         return pick.ShowDialog(this);
     }
 }
