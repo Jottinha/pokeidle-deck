@@ -77,6 +77,10 @@ Só leitura e aviso. **Nenhuma compra automática** — comprar fica sempre com 
       unidade, filtros de lucro mínimo e de vendidos em 7 dias, e **Abrir no jogo** (leva a conta escolhida até o item no
       mercado do jogo, sem comprar). Lê sempre pela conta principal (ou a primeira no jogo); clique no cartão
       explica a conta.
+- [x] **Conferência com vendas reais:** as 10 melhores de cada aba são conferidas com a Tabela de preços do jogo
+      (vendas que aconteceram nos últimos 7 dias) e com o anúncio mais barato de outro vendedor. O preço de revenda vira o
+      menor entre a mediana das vendas reais e um pouco abaixo do concorrente; cada cartão ganha confiança alta/média/baixa.
+- [x] Abas **Ganhar gemas** / **Ganhar coins**; "Abrir no jogo" funciona de novo depois da 1ª vez.
 - [ ] **Pokémon:** o mesmo pokémon com atributos parecidos (IV, P5, nível) bem abaixo dos outros (mais difícil: cada
       pokémon é diferente; fica para uma próxima versão).
 - [ ] Favoritos e um aviso quando aparece algo bom.

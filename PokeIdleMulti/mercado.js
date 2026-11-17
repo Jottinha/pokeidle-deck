@@ -65,7 +65,50 @@
         at: Date.now(),
         linhas: (m.linhas ?? []).map((a) => ({ vendedor: a.vendedor, qtd: a.qtd, preco: a.preco })),
       };
+    } else if (m.t === 'market' && m.aba === 'historicoGlobal' && m.seq != null && histBySeq[m.seq]) {
+      // A "Tabela de preços" do jogo filtrada por um item e uma moeda: as vendas que aconteceram de verdade.
+      const key = histBySeq[m.seq];
+      delete histBySeq[m.seq];
+      history[key] = {
+        at: Date.now(),
+        linhas: (m.linhas ?? []).map((l) => ({
+          em: l.em, bruto: l.bruto, qtd: l.qtd ?? l.quantidade ?? null, unitario: l.unitario ?? l.precoUnitario ?? null,
+          descricao: l.descricao ?? null, moeda: l.moeda,
+        })),
+      };
     }
+  }
+
+  // ---- Conferência das oportunidades: os anúncios de agora e as vendas reais de cada item ----
+  // Pedidos em fila, um a cada 0,8 s (como alguém clicando nos itens), para não pesar no servidor do jogo.
+  const history = {}; // "itemId:moeda" → { at, linhas }
+  const histBySeq = {}; // seq do pedido → "itemId:moeda" (seq negativo: a tela do jogo ignora a resposta)
+  let histSeq = -1000;
+  const queue = [];
+  let queueTimer = 0;
+  function pump() {
+    late();
+    if (!queue.length || socket?.readyState !== 1) {
+      clearInterval(queueTimer);
+      queueTimer = 0;
+      return;
+    }
+    socket.send(JSON.stringify(queue.shift()));
+  }
+  function detail(reqs) {
+    for (const [itemId, moeda] of reqs) {
+      const id = Number(itemId);
+      const cur = moeda === 'orb' ? 'orb' : 'gold';
+      const key = `${id}:${cur}`;
+      delete listings[key];
+      delete history[key];
+      queue.push({ t: 'market.item', itemId: id, moeda: cur });
+      const seq = --histSeq;
+      histBySeq[seq] = key;
+      queue.push({ t: 'market.historicoGlobal', tipo: 'item', itemId: id, moeda: cur, pagina: 0, seq });
+    }
+    if (!queueTimer) queueTimer = setInterval(pump, 800);
+    return queue.length;
   }
 
   function send(obj) {
@@ -105,21 +148,33 @@
   // a aba Itens, todas as categorias, o item e a moeda. Não compra: a compra continua no botão do jogo.
   async function open(itemId, moeda) {
     const q = (s) => document.querySelector(s);
+    // À vista de verdade: a janela do mercado fechada continua na página, só escondida (era por isso que o "Abrir no
+    // jogo" funcionava uma vez e depois não abria mais: o deck achava que o mercado já estava aberto).
+    const shown = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
     const menu = q('button[data-modal="community"]');
     if (!menu) return 'o botão do mercado não está na tela (a conta está no jogo?)';
-    if (!q('#cm-lista')) menu.click();
-    if (!(await until(() => q('#cm-lista')))) return 'o mercado não abriu';
+    if (!shown(q('#cm-lista'))) {
+      menu.click();
+      if (!(await until(() => shown(q('#cm-lista'))))) {
+        // Outra janela do jogo por cima (Market do NPC, mochila…) pode segurar o clique: tenta de novo.
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await wait(250);
+        menu.click();
+      }
+    }
+    if (!(await until(() => shown(q('#cm-lista'))))) return 'o mercado não abriu';
     const tipo = await until(() => q('.cm-filtro[data-tipo="item"]'), 2500);
     if (tipo && !tipo.classList.contains('on')) tipo.click();
     const cat = await until(() => q('.cm-filtro[data-cat=""]'), 1500);
     if (cat && !cat.classList.contains('on')) cat.click();
-    let row = await until(() => q(`.cmi-linha[data-item="${Number(itemId)}"]`), 2500);
+    const visibleRow = () => [...document.querySelectorAll(`.cmi-linha[data-item="${Number(itemId)}"]`)].find(shown);
+    let row = await until(visibleRow, 2500);
     if (!row) {
       // Um filtro (a busca, "ocultar sem estoque") pode esconder o item: limpa e tenta de novo.
       q('#cm-limpar')?.click();
       await wait(300);
       q('.cm-filtro[data-tipo="item"]:not(.on)')?.click();
-      row = await until(() => q(`.cmi-linha[data-item="${Number(itemId)}"]`), 2500);
+      row = await until(visibleRow, 2500);
     }
     if (!row) return 'não achei o item na lista do mercado';
     row.scrollIntoView({ block: 'center' });
@@ -132,6 +187,8 @@
   window.__deckMercado = {
     /** Pede o resumo de todos os itens (menor preço e média de 7 dias). false: sem conexão ou cedo demais. */
     scan: () => send({ t: 'market.itens' }),
+    /** Confere itens: [[itemId, 'gold'|'orb'], …] → os anúncios de agora e as vendas reais de cada um (em fila). */
+    detail,
     /** Abre o item no mercado do jogo; o resultado fica em summary().lastOpen. */
     open(itemId, moeda) {
       lastOpen = { at: Date.now(), result: 'abrindo' };
@@ -155,6 +212,9 @@
         catalog,
         icons: itemIcons,
         items,
+        listings,
+        history,
+        pending: queue.length,
         lastOpen,
       };
     },

@@ -40,15 +40,25 @@
   .chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 3px 11px; cursor: pointer; }
   .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-  .cols { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; align-items: start; }
-  @media (max-width: 1100px) { .cols { grid-template-columns: 1fr; } }
-  section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
-  section.gem { border-color: rgba(232,121,249,.45); }
-  section h2 { display: flex; align-items: center; gap: 8px; margin: 2px 4px 10px; font-size: 16px; font-weight: 600; }
-  section h2 img { width: 22px; height: 22px; }
-  section h2 .count { margin-left: auto; font-size: 12px; color: var(--muted); font-weight: 400; }
-  section h2 .tag { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--gem-bg); color: var(--gem); font-weight: 600; }
-  .sub { color: var(--faint); font-size: 12px; margin: -6px 4px 10px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 0; }
+  .tab { display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 12px 12px 0 0; cursor: pointer;
+         background: var(--panel); border: 1px solid var(--line); border-bottom: none; color: var(--muted); font-size: 15px; font-weight: 600; }
+  .tab img { width: 20px; height: 20px; }
+  .tab .n { font-size: 12px; font-weight: 600; padding: 0 8px; border-radius: 999px; background: var(--card2); color: var(--text); }
+  .tab.gem.on { color: var(--gem); background: #20172a; border-color: rgba(232,121,249,.55); }
+  .tab.gold.on { color: var(--gold); background: #231d12; border-color: rgba(245,185,66,.55); }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 0 14px 14px 14px; padding: 12px; }
+  section.gem { border-color: rgba(232,121,249,.55); background: #15121b; }
+  section.gold { border-color: rgba(245,185,66,.55); background: #16140f; }
+  .sub { color: var(--faint); font-size: 12px; margin: 2px 4px 12px; }
+  .badge { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+  .badge.alta { background: rgba(52,211,120,.15); color: var(--ok); }
+  .badge.media { background: rgba(250,204,21,.15); color: #facc15; }
+  .badge.baixa { background: rgba(244,94,80,.15); color: #f45e50; }
+  .badge.wait { background: var(--card2); color: var(--muted); }
+  .badge.avg { background: transparent; border: 1px dashed var(--line); color: var(--faint); }
+  .facts { grid-column: 2 / 4; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); }
+  .facts b { color: var(--text); font-weight: 600; }
 
   .card { display: grid; grid-template-columns: 44px 1fr auto; gap: 4px 12px; align-items: center; background: var(--card);
           border: 1px solid transparent; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; }
@@ -76,7 +86,7 @@
   .meta .go { margin-left: auto; }
   .go { background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 3px 10px; cursor: pointer; color: var(--text); font-size: 12px; }
   .go:hover { background: var(--accent); border-color: var(--accent); }
-  .explain { display: none; grid-column: 1 / 4; color: var(--muted); font-size: 13px; background: #161821; border-radius: 8px; padding: 8px 10px; margin-top: 6px; }
+  .explain { white-space: pre-line; display: none; grid-column: 1 / 4; color: var(--muted); font-size: 13px; background: #161821; border-radius: 8px; padding: 8px 10px; margin-top: 6px; }
   .card.open .explain { display: block; }
   .empty { color: var(--faint); text-align: center; padding: 26px 10px; }
   .toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--card2); border: 1px solid var(--line);
@@ -98,18 +108,14 @@
   <span>Lucro mínimo <span class="chips" id="minPct"></span></span>
   <span>Vendidos em 7 dias <span class="chips" id="minSales"></span></span>
 </div>
-<div class="cols">
-  <section class="gem">
-    <h2><img id="gemIcon" alt="">Ganhar gemas <span class="tag">mais importante</span><span class="count" id="gemCount"></span></h2>
-    <p class="sub">Revender em gemas, ou comprar com gold e revender em gemas. O lucro é em gemas, por unidade.</p>
-    <div id="gems"></div>
-  </section>
-  <section class="gold">
-    <h2><img id="goldIcon" alt="">Ganhar gold<span class="count" id="goldCount"></span></h2>
-    <p class="sub">Revender em gold, ou comprar com gemas e revender em gold. O lucro é em gold, por unidade.</p>
-    <div id="golds"></div>
-  </section>
+<div class="tabs">
+  <div class="tab gem" data-tab="gem"><img id="gemIcon" alt="">Ganhar gemas <span class="n" id="gemCount">0</span></div>
+  <div class="tab gold" data-tab="gold"><img id="goldIcon" alt="">Ganhar coins <span class="n" id="goldCount">0</span></div>
 </div>
+<section id="panel">
+  <p class="sub" id="sub"></p>
+  <div id="list"></div>
+</section>
 <footer>O deck só lê o mercado: ele nunca compra nem anuncia. "Abrir no jogo" leva a conta até o item; a compra é com você.</footer>
 <div class="toast" id="toast"></div>
 
@@ -131,7 +137,7 @@
   const money = (v, cur) => `<span class="money"><img src="${cur === 'gemas' ? GEM : GOLD}" alt="">${cur === 'gemas' ? gems(v) : goldShort(v)}</span>`;
 
   let data = null;
-  const state = { minPct: 10, minSales: 3 };
+  const state = { minPct: 10, minSales: 3, tab: 'gem' };
   try { Object.assign(state, JSON.parse(localStorage.getItem('deckMercado') || '{}')); } catch { }
   const save = () => { try { localStorage.setItem('deckMercado', JSON.stringify(state)); } catch { } };
 
@@ -150,34 +156,70 @@
   chips('minPct', [0, 5, 10, 20, 50], 'minPct', (v) => v === 0 ? 'qualquer' : v + '%');
   chips('minSales', [1, 3, 10, 30], 'minSales', (v) => v + '+');
 
+  function badge(c) {
+    if (c.checked) {
+      const cls = c.confidence === 'alta' ? 'alta' : c.confidence === 'média' ? 'media' : 'baixa';
+      return `<span class="badge ${cls}" title="Conferido com as vendas reais dos últimos 7 dias e os anúncios de agora">✓ confiança ${esc(c.confidence)}</span>`;
+    }
+    if (c.checking) return '<span class="badge wait">conferindo…</span>';
+    return '<span class="badge avg" title="Só pela média de 7 dias do jogo: as 10 melhores de cada aba são conferidas">pela média do jogo</span>';
+  }
+
+  function facts(c) {
+    if (!c.checked) return '';
+    const cur = c.sellCurrency;
+    const sales = c.recentCount
+      ? `Vendas reais (7 dias): <b>${br.format(c.recentCount)}</b> · mediana ${money(c.recentMedian, cur)}`
+      : '<b>Nenhuma venda real nos últimos 7 dias</b>';
+    const comp = c.competitor != null ? `Concorrente mais barato: ${money(c.competitor, cur)}` : 'Ninguém mais vendendo nessa moeda';
+    return `<div class="facts"><span>${sales}</span><span>${comp}</span></div>`;
+  }
+
   function card(c) {
     const pct = Math.round(c.percent * 100);
     return `<div class="card ${c.gems ? 'gem' : 'gold'}" data-item="${c.itemId}" data-gems="${c.gems}">
       <div class="icon"><img src="${esc(c.icon || FALLBACK)}" alt="" onerror="this.src='${FALLBACK}'"></div>
-      <div class="name"><span>${esc(c.item)}</span><em class="kind">${esc(c.kind)}</em></div>
+      <div class="name"><span>${esc(c.item)}</span><em class="kind">${esc(c.kind)}</em>${badge(c)}</div>
       <div class="profit">
         <div class="big">+${c.gems ? gems(c.profit) : goldShort(c.profit)}<img src="${c.gems ? GEM : GOLD}" alt=""></div>
         <div class="unit">por unidade</div>
         <div class="pct">+${pct}%</div>
       </div>
       <div class="flow">Compre por ${money(c.buy, c.buyCurrency)} <span class="arrow">→</span> revenda por ${money(c.sell, c.sellCurrency)}</div>
-      <div class="meta"><span>${esc(c.note)}</span><span>${br.format(c.sales7d)} vendidos em 7 dias</span>
+      ${facts(c)}
+      <div class="meta"><span>${esc(c.note)}</span><span>${br.format(c.sales7d)} vendidos em 7 dias (média do jogo)</span>
         <button class="go" data-open="1">Abrir no jogo ›</button></div>
       <div class="explain">${esc(c.explain)}</div>
     </div>`;
   }
 
   function render() {
+    const gemTab = state.tab !== 'gold';
+    for (const t of document.querySelectorAll('.tab')) t.classList.toggle('on', (t.dataset.tab === 'gem') === gemTab);
+    $('panel').className = gemTab ? 'gem' : 'gold';
+    $('sub').textContent = gemTab
+      ? 'Termina com mais gemas: revender em gemas, ou comprar com coins e revender em gemas. Lucro em gemas, por unidade.'
+      : 'Termina com mais coins: revender em coins, ou comprar com gemas e revender em coins. Lucro em coins, por unidade.';
     if (!data) return;
     const ok = (c) => c.percent * 100 >= state.minPct && c.sales7d >= state.minSales;
-    const g = data.chances.filter((c) => c.gems && ok(c));
-    const o = data.chances.filter((c) => !c.gems && ok(c));
-    const empty = (txt) => `<div class="empty">${txt}</div>`;
-    $('gems').innerHTML = g.length ? g.map(card).join('') : empty('Nenhuma oportunidade de gemas com esses filtros agora.');
-    $('golds').innerHTML = o.length ? o.map(card).join('') : empty('Nenhuma oportunidade de gold com esses filtros agora.');
-    $('gemCount').textContent = g.length ? `${g.length} de ${data.chances.filter((c) => c.gems).length}` : '';
-    $('goldCount').textContent = o.length ? `${o.length} de ${data.chances.filter((c) => !c.gems).length}` : '';
+    // As conferidas com confiança primeiro; dentro de cada grupo, o maior lucro.
+    const rank = (c) => (c.checked ? (c.confidence === 'alta' ? 0 : c.confidence === 'média' ? 1 : 2) : c.checking ? 3 : 4);
+    const list = (gems) => data.chances.filter((c) => c.gems === gems && ok(c)).sort((a, b) => rank(a) - rank(b) || b.profit - a.profit);
+    const g = list(true), o = list(false);
+    $('gemCount').textContent = g.length;
+    $('goldCount').textContent = o.length;
+    const shown = gemTab ? g : o;
+    $('list').innerHTML = shown.length ? shown.map(card).join('')
+      : `<div class="empty">Nenhuma oportunidade de ${gemTab ? 'gemas' : 'coins'} com esses filtros agora.</div>`;
   }
+  document.querySelector('.tabs').onclick = (e) => {
+    const t = e.target.closest('.tab');
+    if (!t) return;
+    state.tab = t.dataset.tab;
+    save();
+    render();
+  };
+  render();
 
   document.body.addEventListener('click', (e) => {
     const cardEl = e.target.closest('.card');

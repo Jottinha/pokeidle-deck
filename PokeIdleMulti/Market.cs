@@ -21,7 +21,30 @@ internal sealed record MarketChance(
     double Percent,
     int Sales7d,
     string Note,
-    string Explain);
+    string Explain)
+{
+    /// <summary>Já conferida com as vendas reais e os anúncios de agora (senão, só pela média de 7 dias do jogo).</summary>
+    public bool Checked { get; init; }
+
+    /// <summary>Na fila da conferência (o cartão mostra "conferindo…").</summary>
+    public bool Checking { get; init; }
+
+    /// <summary>"alta", "média" ou "baixa": quanto dá para confiar que vende pelo preço de revenda.</summary>
+    public string? Confidence { get; init; }
+
+    /// <summary>A mediana do preço por unidade das vendas reais recentes na moeda da revenda, e quantas foram (7 dias).</summary>
+    public double? RecentMedian { get; init; }
+
+    public int RecentCount { get; init; }
+
+    /// <summary>O anúncio mais barato de outro vendedor na moeda da revenda (null: ninguém mais vendendo).</summary>
+    public double? Competitor { get; init; }
+
+    /// <summary>O preço de revenda pela média do jogo, antes da conferência.</summary>
+    public double AverageSell { get; init; }
+
+    public string SellKey => SellCurrency == "gemas" ? "orb" : "gold";
+}
 
 /// <summary>
 /// O analisador do Mercado da Comunidade. O mercado.js da página lê, pelo socket do jogo, o menor preço de cada item em
@@ -68,6 +91,15 @@ internal static class Market
         public string? LastOpen { get; init; }
 
         public DateTime? LastOpenAt { get; init; }
+
+        /// <summary>Os anúncios de agora de cada item conferido ("itemId:gold|orb" → preços por unidade, do menor ao maior).</summary>
+        public Dictionary<string, List<double>> Listings { get; } = new();
+
+        /// <summary>As vendas reais de cada item conferido ("itemId:gold|orb" → quando e o preço por unidade).</summary>
+        public Dictionary<string, List<(DateTime At, double Unit)>> History { get; } = new();
+
+        /// <summary>Pedidos de conferência ainda na fila da página.</summary>
+        public int Pending { get; init; }
     }
 
     private sealed record Row(int Id, string Name, string? Icon, double? MinGold, double? MinOrb, double? AvgGold, int SoldGold,
@@ -138,11 +170,99 @@ internal static class Market
         var snapshot = new Snapshot
         {
             Connected = connected, At = at, GoldTax = goldTax, ItemsWithListings = rows.Count, LastOpen = lastOpen, LastOpenAt = lastOpenAt,
+            Pending = Int(root, "pending") ?? 0,
         };
+        if (root.TryGetProperty("listings", out var ls) && ls.ValueKind == JsonValueKind.Object)
+            foreach (var p in ls.EnumerateObject())
+                if (p.Value.TryGetProperty("linhas", out var lines) && lines.ValueKind == JsonValueKind.Array)
+                    snapshot.Listings[p.Name] = lines.EnumerateArray().Select(l => Num(l, "preco")).OfType<double>().Where(v => v > 0).Order().ToList();
+        if (root.TryGetProperty("history", out var hs) && hs.ValueKind == JsonValueKind.Object)
+            foreach (var p in hs.EnumerateObject())
+                if (p.Value.TryGetProperty("linhas", out var lines) && lines.ValueKind == JsonValueKind.Array)
+                    snapshot.History[p.Name] = lines.EnumerateArray().Select(SaleOf).OfType<(DateTime, double)>().ToList();
         snapshot.GemValue = GemValue(rows);
         snapshot.Chances.AddRange(Find(rows, goldTax, snapshot.GemValue));
         snapshot.Chances.Sort((a, b) => b.Profit.CompareTo(a.Profit));
         return snapshot;
+    }
+
+    /// <summary>
+    /// Uma venda da Tabela de preços: quando e o preço por unidade. O "bruto" é o valor da venda; com mais de uma unidade
+    /// (o "qtd", ou o "10x" no começo da descrição), divide.
+    /// </summary>
+    private static (DateTime, double)? SaleOf(JsonElement l)
+    {
+        if (Num(l, "em") is not double em || Num(l, "bruto") is not double gross || gross <= 0)
+            return null;
+        double unit = Num(l, "unitario") is double u and > 0 ? u
+            : Int(l, "qtd") is int q and > 1 ? gross / q
+            : Str(l, "descricao") is string d && System.Text.RegularExpressions.Regex.Match(d, @"^\s*(\d+)\s*[x×]") is { Success: true } m
+              && int.TryParse(m.Groups[1].Value, out int n) && n > 1 ? gross / n
+            : gross;
+        return (DateTimeOffset.FromUnixTimeMilliseconds((long)em).LocalDateTime, unit);
+    }
+
+    /// <summary>
+    /// Confere as oportunidades com o que a página trouxe: as vendas reais recentes do item na moeda da revenda e o
+    /// anúncio mais barato de outro vendedor. O preço de revenda passa a ser o menor entre a mediana das vendas reais e um
+    /// pouco abaixo do concorrente (para vender, é preciso estar abaixo dele); o lucro é refeito com ele. A que deixa de
+    /// dar lucro sai da lista. <paramref name="checking"/>: as que estão na fila (ganham o "conferindo…").
+    /// </summary>
+    public static List<MarketChance> Refine(Snapshot s, IReadOnlyCollection<string> checking)
+    {
+        var result = new List<MarketChance>();
+        var since = DateTime.Now.AddDays(-7);
+        foreach (var c in s.Chances)
+        {
+            string key = $"{c.ItemId}:{c.SellKey}";
+            if (!s.Listings.TryGetValue(key, out var listing) || !s.History.TryGetValue(key, out var sales))
+            {
+                result.Add(checking.Contains(key) ? c with { Checking = true } : c);
+                continue;
+            }
+            bool sameCurrency = c.BuyCurrency == c.SellCurrency;
+            // Na revenda na mesma moeda, o 1º anúncio é o que você compra: o concorrente é o seguinte.
+            double? competitor = listing.Skip(sameCurrency ? 1 : 0).Cast<double?>().FirstOrDefault();
+            var recent = sales.Where(x => x.At >= since).Select(x => x.Unit).Order().ToList();
+            double? median = recent.Count == 0 ? null
+                : recent.Count % 2 == 1 ? recent[recent.Count / 2] : (recent[recent.Count / 2 - 1] + recent[recent.Count / 2]) / 2;
+            double? undercut = competitor is double comp
+                ? c.SellKey == "orb" ? (comp >= 3 ? comp - 1 : comp) : Math.Floor(comp * 0.99)
+                : null;
+            var candidates = new[] { median, undercut }.OfType<double>().ToList();
+            double sell = candidates.Count > 0 ? candidates.Min() : c.AverageSell;
+            double tax = c.SellKey == "orb" ? OrbTax : s.GoldTax;
+            double net = sell * (1 - tax);
+            double gem = s.GemValue ?? 0;
+            (double profit, double cost) = c.Kind switch
+            {
+                "Coins viram gemas" when gem > 0 => (net - c.Buy / gem, c.Buy / gem),
+                "Gemas viram coins" when gem > 0 => (net - c.Buy * gem, c.Buy * gem),
+                _ => (net - c.Buy, c.Buy),
+            };
+            if (profit <= 0)
+                continue;
+            string confidence = recent.Count >= 5 ? "alta" : recent.Count >= 2 ? "média" : "baixa";
+            string money(double v) => c.SellKey == "orb" ? Gems(v) : Gold(v);
+            string check = (median is double md ? $"Vendas reais nos últimos 7 dias: {recent.Count}, mediana de {money(md)} por unidade. "
+                               : "Nenhuma venda real nos últimos 7 dias. ")
+                           + (competitor is double cp ? $"Anúncio mais barato de outro vendedor: {money(cp)}. " : "Ninguém mais está vendendo nessa moeda. ")
+                           + $"Preço de revenda considerado: {money(sell)} (a média do jogo dizia {money(c.AverageSell)}).";
+            result.Add(c with
+            {
+                Sell = sell,
+                Profit = profit,
+                Percent = profit / cost,
+                Checked = true,
+                Confidence = confidence,
+                RecentMedian = median,
+                RecentCount = recent.Count,
+                Competitor = competitor,
+                Explain = c.Explain + "\n\nConferido: " + check,
+            });
+        }
+        result.Sort((a, b) => b.Profit.CompareTo(a.Profit));
+        return result;
     }
 
     /// <summary>O caminho do ícone no jogo ("site/assets/items/x.png") como endereço completo.</summary>
@@ -181,7 +301,7 @@ internal static class Market
                     yield return new MarketChance(r.Id, r.Name, r.Icon, true, "Revenda em gemas", o, "gemas", ao, "gemas", profit, profit / o,
                         r.SoldOrb, $"vende em média por {Gems(ao)}",
                         $"Compre pelo menor anúncio em gemas ({Gems(o)}) e anuncie de novo pela média dos últimos 7 dias ({Gems(ao)}; " +
-                        $"{r.SoldOrb} vendidos). Depois da taxa de {OrbTax:P0} você recebe {Gems(net)}: lucro de {Gems(profit)} por unidade.");
+                        $"{r.SoldOrb} vendidos). Depois da taxa de {OrbTax:P0} você recebe {Gems(net)}: lucro de {Gems(profit)} por unidade.") { AverageSell = ao };
             }
 
             // Gold vira gema: compra em gold e revende em gemas pelo menor de hoje (ou pela média, sem anúncio em gemas).
@@ -191,11 +311,11 @@ internal static class Market
                 double perGem = g / net;
                 double profit = net - g / value;
                 if (profit > 0)
-                    yield return new MarketChance(r.Id, r.Name, r.Icon, true, "Gold vira gema", g, "gold", sellOrb, "gemas", profit, profit / (g / value),
+                    yield return new MarketChance(r.Id, r.Name, r.Icon, true, "Coins viram gemas", g, "gold", sellOrb, "gemas", profit, profit / (g / value),
                         r.SoldOrb, $"cada gema sai por {GoldShort(perGem)} (o mercado paga {GoldShort(value)})",
-                        $"Compre em gold pelo menor anúncio ({Gold(g)}) e anuncie em gemas por {Gems(sellOrb)}. Depois da taxa de {OrbTax:P0} " +
+                        $"Compre em coins pelo menor anúncio ({Gold(g)}) e anuncie em gemas por {Gems(sellOrb)}. Depois da taxa de {OrbTax:P0} " +
                         $"você recebe {Gems(net)}: cada gema sai por {Gold(perGem)}, e o mercado paga {Gold(value)} por gema. " +
-                        $"Em gemas, o ganho é de {Gems(profit)} por unidade.");
+                        $"Em gemas, o ganho é de {Gems(profit)} por unidade.") { AverageSell = sellOrb };
             }
 
             // ---- Ganhar gold ----
@@ -206,10 +326,10 @@ internal static class Market
                 double net = ag * (1 - goldTax);
                 double profit = net - g2;
                 if (profit > 0)
-                    yield return new MarketChance(r.Id, r.Name, r.Icon, false, "Revenda em gold", g2, "gold", ag, "gold", profit, profit / g2,
+                    yield return new MarketChance(r.Id, r.Name, r.Icon, false, "Revenda em coins", g2, "gold", ag, "gold", profit, profit / g2,
                         r.SoldGold, $"vende em média por {GoldShort(ag)}",
-                        $"Compre pelo menor anúncio em gold ({Gold(g2)}) e anuncie de novo pela média dos últimos 7 dias ({Gold(ag)}; " +
-                        $"{r.SoldGold} vendidos). Depois da taxa de {goldTax:P0} você recebe {Gold(net)}: lucro de {Gold(profit)} por unidade.");
+                        $"Compre pelo menor anúncio em coins ({Gold(g2)}) e anuncie de novo pela média dos últimos 7 dias ({Gold(ag)}; " +
+                        $"{r.SoldGold} vendidos). Depois da taxa de {goldTax:P0} você recebe {Gold(net)}: lucro de {Gold(profit)} por unidade.") { AverageSell = ag };
             }
 
             // Gema vira gold: compra em gemas e revende em gold pelo menor de hoje (ou pela média).
@@ -219,15 +339,15 @@ internal static class Market
                 double net = sellGold * (1 - goldTax);
                 double profit = net - cost;
                 if (profit > 0)
-                    yield return new MarketChance(r.Id, r.Name, r.Icon, false, "Gema vira gold", o2, "gemas", sellGold, "gold", profit, profit / cost,
+                    yield return new MarketChance(r.Id, r.Name, r.Icon, false, "Gemas viram coins", o2, "gemas", sellGold, "gold", profit, profit / cost,
                         r.SoldGold, $"cada gema rende {GoldShort(net / o2)} (o mercado paga {GoldShort(value2)})",
-                        $"Compre em gemas pelo menor anúncio ({Gems(o2)}, que valem {Gold(cost)}) e anuncie em gold por {Gold(sellGold)}. " +
-                        $"Depois da taxa de {goldTax:P0} você recebe {Gold(net)}: lucro de {Gold(profit)} por unidade.");
+                        $"Compre em gemas pelo menor anúncio ({Gems(o2)}, que valem {Gold(cost)}) e anuncie em coins por {Gold(sellGold)}. " +
+                        $"Depois da taxa de {goldTax:P0} você recebe {Gold(net)}: lucro de {Gold(profit)} por unidade.") { AverageSell = sellGold };
             }
         }
     }
 
-    public static string Gold(double value) => Math.Round(value).ToString("N0", Br) + " gold";
+    public static string Gold(double value) => Math.Round(value).ToString("N0", Br) + " coins";
 
     public static string Gems(double value) => (value < 100 ? value.ToString("0.##", Br) : Math.Round(value).ToString("N0", Br)) + " gemas";
 

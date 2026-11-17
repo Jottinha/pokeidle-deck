@@ -170,10 +170,9 @@ internal sealed class MarketWindow : Form
                 Status("<span class=\"warn\">O jogo não respondeu à leitura do mercado. Tente de novo em alguns segundos.</span>");
                 return;
             }
-            string gem = snapshot.GemValue is double v ? $"1 gema ≈ <b>{Market.GoldShort(v)} gold</b>" : "valor da gema: sem vendas nas duas moedas";
-            Status($"Lido às <b>{snapshot.At:HH:mm:ss}</b> pela <b>{Esc(pane.AccountName)}</b> · {gem} · " +
-                   $"{snapshot.ItemsWithListings} itens à venda · taxa de venda {snapshot.GoldTax:P0} em gold e 15% em gemas");
-            Post(new { type = "data", chances = snapshot.Chances });
+            string gem = snapshot.GemValue is double v ? $"1 gema ≈ <b>{Market.GoldShort(v)} coins</b>" : "valor da gema: sem vendas nas duas moedas";
+            string head = $"Lido às <b>{snapshot.At:HH:mm:ss}</b> pela <b>{Esc(pane.AccountName)}</b> · {gem} · {snapshot.ItemsWithListings} itens à venda";
+            await CheckAsync(pane, snapshot, head);
         }
         catch (Exception ex)
         {
@@ -184,6 +183,51 @@ internal sealed class MarketWindow : Form
             _busy = false;
             Post(new { type = "busy", on = false });
         }
+    }
+
+    /// <summary>Quantas oportunidades de cada lista (gemas e gold) são conferidas a cada leitura: as de maior lucro.</summary>
+    private const int CheckTop = 10;
+
+    /// <summary>
+    /// Mostra as oportunidades pela média do jogo e confere as melhores de cada lista com as vendas reais e os anúncios de
+    /// agora (a página pede em fila, um a cada 0,8 s). Os cartões se atualizam conforme as respostas chegam.
+    /// </summary>
+    private async Task CheckAsync(AccountPane pane, Market.Snapshot first, string head)
+    {
+        var top = first.Chances.Where(c => c.Gems).Take(CheckTop)
+            .Concat(first.Chances.Where(c => !c.Gems).Take(CheckTop))
+            .Select(c => (c.ItemId, c.SellKey)).Distinct().ToList();
+        var keys = top.Select(t => $"{t.ItemId}:{t.SellKey}").ToHashSet();
+        Post(new { type = "data", chances = Market.Refine(first, keys) });
+        if (top.Count == 0)
+        {
+            Status(head + " · nenhuma oportunidade para conferir");
+            return;
+        }
+        string list = string.Join(",", top.Select(t => $"[{t.ItemId},'{t.SellKey}']"));
+        await pane.RunGameScriptAsync($"window.__deckMercado && window.__deckMercado.detail([{list}])");
+        // ~1,6 s por item (anúncios + vendas); com folga.
+        var deadline = DateTime.Now.AddSeconds(top.Count * 1.8 + 10);
+        while (!IsDisposed && DateTime.Now < deadline)
+        {
+            await Task.Delay(1200);
+            var s = Market.Parse(await pane.RunGameScriptAsync(Market.SummaryScript));
+            if (s is null)
+                break;
+            // As oportunidades são as da leitura (as mesmas da 1ª lista); da página vêm só os anúncios e as vendas.
+            s.Chances.Clear();
+            s.Chances.AddRange(first.Chances);
+            s.GemValue = first.GemValue;
+            int done = keys.Count(k => s.Listings.ContainsKey(k) && s.History.ContainsKey(k));
+            var waiting = keys.Where(k => !(s.Listings.ContainsKey(k) && s.History.ContainsKey(k))).ToHashSet();
+            Post(new { type = "data", chances = Market.Refine(s, waiting) });
+            Status(head + (done < keys.Count
+                ? $" · <b>conferindo vendas reais: {done} de {keys.Count}</b>…"
+                : $" · <b>{keys.Count} melhores conferidas</b> com as vendas reais e os anúncios de agora"));
+            if (done == keys.Count)
+                return;
+        }
+        Status(head + " · algumas não deu para conferir (o jogo não respondeu a tempo)");
     }
 
     /// <summary>
