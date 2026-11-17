@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -25,7 +25,6 @@ internal sealed class AccountPane : UserControl
     private readonly ToolStripButton _reload = new(Theme.ReloadGlyph) { Font = Theme.Symbols };
     private readonly ToolStripButton _mute = new(Theme.SoundGlyph) { Font = Theme.Symbols };
     private readonly ToolStripButton _vote = new("🗳 Votar") { Visible = false };
-    private readonly ToolStripDropDownButton _lives = new("lives") { Enabled = false };
     private readonly ToolStripButton _power = new(Theme.PowerGlyph) { Font = Theme.Symbols };
     private readonly ToolStripButton _restock = new(Theme.CartGlyph) { Font = Theme.Symbols };
     // As espadas da fila de PvP: os ícones do Windows não têm, a fonte de símbolos tem.
@@ -44,9 +43,6 @@ internal sealed class AccountPane : UserControl
     private string? _statusText = "abrindo…";
     private string? _note;
     private DateTime _noteUntil;
-    // O que o deck disse do botão para cada site (o botão "lives" junta os dois).
-    private (bool Enabled, bool Closed, string Tooltip) _kick = (false, false, "");
-    private (bool Enabled, bool Closed, string Tooltip) _twitch = (false, false, "");
     private bool _loginScreen;
     private string _voteText = "🗳 Votar";
     private bool _voteShort;
@@ -74,7 +70,7 @@ internal sealed class AccountPane : UserControl
         _info.ForeColor = Theme.Muted;
 
         // Itens à direita entram da direita para a esquerda.
-        _power.Alignment = _focus.Alignment = _reload.Alignment = _mute.Alignment = _lives.Alignment =
+        _power.Alignment = _focus.Alignment = _reload.Alignment = _mute.Alignment =
             _vote.Alignment = _restock.Alignment = _pvp.Alignment = ToolStripItemAlignment.Right;
         _restock.Click += (_, _) => RestockRequested?.Invoke(this);
         ShowRestock(null);
@@ -86,7 +82,7 @@ internal sealed class AccountPane : UserControl
                 PvpMenuRequested?.Invoke(this);
         };
         ShowPvp(null);
-        _power.ToolTipText = "Desligar esta conta: o jogo, as extensões, as lives e o voto dela param (ela continua aqui no deck)";
+        _power.ToolTipText = "Desligar esta conta: o jogo, as extensões e o voto dela param (ela continua aqui no deck)";
         _power.Click += (_, _) => PowerRequested?.Invoke(this);
         _focus.ToolTipText = "Ampliar esta conta / voltar (duplo clique no cabeçalho faz o mesmo)";
         _reload.ToolTipText = "Recarregar limpo: apaga o cache do jogo (e os service workers do site) e recarrega. O login e as extensões ficam";
@@ -96,12 +92,10 @@ internal sealed class AccountPane : UserControl
         _reload.Click += (_, _) => ReloadRequested?.Invoke(this);
         _mute.Click += (_, _) => SetMuted(!Muted);
         _vote.Click += (_, _) => VoteRequested?.Invoke(this);
-        _lives.DropDownOpening += (_, _) => LivesMenuOpening?.Invoke(this, _lives.DropDownItems);
-        _lives.DropDownItems.Add("…");
         _header.DoubleClick += (_, _) => FocusRequested?.Invoke(this);
         _header.SizeChanged += (_, _) => FitHeader();
-        _header.Items.AddRange(new ToolStripItem[] { _dot, _name, _info, _power, _focus, _reload, _mute, _lives, _restock, _pvp, _vote });
-        foreach (var item in new ToolStripItem[] { _power, _focus, _reload, _mute, _lives, _restock, _pvp, _vote })
+        _header.Items.AddRange(new ToolStripItem[] { _dot, _name, _info, _power, _focus, _reload, _mute, _restock, _pvp, _vote });
+        foreach (var item in new ToolStripItem[] { _power, _focus, _reload, _mute, _restock, _pvp, _vote })
             Roomy(item);
 
         _offNote.Font = new Font(Font.FontFamily, 11f);
@@ -140,8 +134,6 @@ internal sealed class AccountPane : UserControl
     /// <summary>Botão direito no ⚔: o menu da tela e da velocidade das partidas.</summary>
     public event Action<AccountPane>? PvpMenuRequested;
 
-    /// <summary>O menu do botão lives abrindo: o deck põe nele as lives da Kick e da Twitch para fechar ou abrir de novo.</summary>
-    public event Action<AccountPane, ToolStripItemCollection>? LivesMenuOpening;
 
     /// <summary>Desligada: fica no deck, mas sem o jogo (nem as extensões, que só rodam nele), lives ou voto.</summary>
     public bool Off { get; private set; }
@@ -256,7 +248,6 @@ internal sealed class AccountPane : UserControl
         await core.AddScriptToExecuteOnDocumentCreatedAsync(Echo.CaptureScript);
         await core.AddScriptToExecuteOnDocumentCreatedAsync(Restock.Script);
         await core.AddScriptToExecuteOnDocumentCreatedAsync(Pvp.Script);
-        await core.AddScriptToExecuteOnDocumentCreatedAsync(Bonus.Script);
         await core.AddScriptToExecuteOnDocumentCreatedAsync(FrameLimitScript);
         await core.AddScriptToExecuteOnDocumentCreatedAsync(SpriteLimitScript);
         _fpsScript = null;
@@ -343,7 +334,7 @@ internal sealed class AccountPane : UserControl
         if (Core is not CoreWebView2 core || _url is null)
             return false;
         string origin = GameOrigin(core);
-        Diag?.Write(everything ? "apagar os dados da conta: tudo (o jogo e os cookies da Twitch e da Kick)" : "apagar os dados da conta: o jogo");
+        Diag?.Write(everything ? "apagar os dados da conta: tudo (o jogo e os cookies de todos os sites)" : "apagar os dados da conta: o jogo");
         StartedAt = null;
         StuckReloads = 0;
         _openSince = _failedSince = null;
@@ -421,7 +412,7 @@ internal sealed class AccountPane : UserControl
     /// </summary>
     private const string OpenScript =
         "(() => {" +
-        " try { const f = window.__deckBonus && window.__deckBonus.summary(); if (f && f.connected) return 'jogo'; } catch { }" +
+        " try { const f = window.__deckPvp && window.__deckPvp.status(); if (f && f.connected && f.state) return 'jogo'; } catch { }" +
         " const shown = (id) => { const e = document.getElementById(id); return !!e && !e.classList.contains('hidden'); };" +
         " if (shown('sessao-tomada')) return 'aberta em outro lugar';" +
         " if (shown('alerta-conta')) { const t = document.getElementById('alerta-conta-titulo');" +
@@ -900,30 +891,6 @@ internal sealed class AccountPane : UserControl
     /// <summary>"desligada", "na fila" ou "esperando" (a cor do ⚔), para o autoteste.</summary>
     public string PvpState { get; private set; } = "desligada";
 
-    /// <summary>O que o bonus.js da página leu (o JSON de <see cref="Bonus.SummaryScript"/>); null sem o jogo.</summary>
-    public async Task<string?> ReadBonusAsync()
-    {
-        if (Off || !OnGame)
-            return null;
-        try
-        {
-            return await WebView.ExecuteScriptAsync(Bonus.SummaryScript);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// A dica do "rodando há": o tempo que falta do bônus das lives.
-    /// </summary>
-    public void ShowInfoTip(string? tip)
-    {
-        if (!_loginScreen)
-            _info.ToolTipText = tip;
-    }
-
     /// <summary>"desligada", "ligada" ou "esperando" (a cor do carrinho), para o autoteste.</summary>
     public string RestockState { get; private set; } = "desligada";
 
@@ -1010,39 +977,6 @@ internal sealed class AccountPane : UserControl
     /// <summary>Só o 🗳 do texto do voto (ele vem antes de tudo e ocupa dois chars).</summary>
     private static string VoteIcon(string text) => text.Length > 2 ? text[..2] : text;
 
-    /// <summary>
-    /// A parte da Kick do botão lives do cabeçalho: sem o que fechar (o motivo fica na dica), ou com live da Kick
-    /// fechada nele. O botão fica apagado quando nenhum dos dois sites tem o que fechar, e marcado quando algum tem
-    /// live fechada.
-    /// </summary>
-    public void SetKick(bool enabled, bool closed, string tooltip)
-    {
-        _kick = (enabled, closed, tooltip);
-        ShowLives();
-    }
-
-    /// <summary>A parte da Twitch do botão lives do cabeçalho (a mesma da Kick).</summary>
-    public void SetTwitch(bool enabled, bool closed, string tooltip)
-    {
-        _twitch = (enabled, closed, tooltip);
-        ShowLives();
-    }
-
-    private void ShowLives()
-    {
-        _lives.Enabled = _kick.Enabled || _twitch.Enabled;
-        _lives.ForeColor = _kick.Closed || _twitch.Closed ? Theme.Accent : Theme.Text;
-        _lives.ToolTipText = Theme.Wrap($"Kick: {_kick.Tooltip}\nTwitch: {_twitch.Tooltip}");
-    }
-
-    /// <summary>A dica do botão lives, para o autoteste.</summary>
-    public string LivesTip => _lives.ToolTipText ?? "";
-
-    /// <summary>A parte de cada site do botão lives ("ligado", "apagado" ou "fechada"), para o autoteste.</summary>
-    public string KickState => _kick.Closed ? "fechada" : _kick.Enabled ? "ligado" : "apagado";
-
-    public string TwitchState => _twitch.Closed ? "fechada" : _twitch.Enabled ? "ligado" : "apagado";
-
     public string? NoteText => DateTime.Now < _noteUntil ? _note : null;
 
     /// <summary>
@@ -1054,16 +988,16 @@ internal sealed class AccountPane : UserControl
         if (off != Off)
             Diag?.Write(off ? "conta desligada" : "conta ligada");
         Off = off;
-        _offNote.Text = $"{AccountName} desligada\n\nNada roda nela: jogo, extensões, lives e voto ficam parados.\n" +
+        _offNote.Text = $"{AccountName} desligada\n\nNada roda nela: jogo, extensões e voto ficam parados.\n" +
                         "Clique no botão de ligar, no canto direito do cabeçalho, para ligar.";
         _offNote.Visible = off;
         WebView.Visible = !off;
-        _reload.Visible = _mute.Visible = _lives.Visible = _restock.Visible = _pvp.Visible = !off;
+        _reload.Visible = _mute.Visible = _restock.Visible = _pvp.Visible = !off;
         foreach (var item in _extensionItems)
             item.Visible = !off;
         _power.ToolTipText = off
-            ? "Ligar esta conta: o jogo abre de novo, com as extensões e as lives dela"
-            : "Desligar esta conta: o jogo, as extensões, as lives e o voto dela param (ela continua aqui no deck)";
+            ? "Ligar esta conta: o jogo abre de novo, com as extensões dela"
+            : "Desligar esta conta: o jogo, as extensões e o voto dela param (ela continua aqui no deck)";
         _power.ForeColor = off ? Theme.Accent : Theme.Text;
         if (off)
         {

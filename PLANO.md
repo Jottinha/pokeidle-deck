@@ -16,23 +16,22 @@ Cada fase termina com o deck **compilando e testado por você nas 4 contas** ant
 
 ## Fase 1 — Limpeza e identidade
 
-- [ ] **Tirar os testes automáticos (3.4):** `ConsumptionTest.cs`, `TestDesktop.cs`, `FakePubSub.cs`, os modos
+- [x] **Tirar os testes automáticos (3.4):** `ConsumptionTest.cs`, `TestDesktop.cs`, `FakePubSub.cs`, os modos
       `--self-test` e `--consumo` em `Program.cs` e o código do autoteste dentro de `DeckForm.cs`.
-- [ ] **Tirar as lives da Twitch e da Kick (por enquanto):** `LivesWindow.cs`, `TwitchLive.cs`, `KickLive.cs`,
+- [x] **Tirar as lives da Twitch e da Kick (por enquanto):** `LivesWindow.cs`, `TwitchLive.cs`, `KickLive.cs`,
       `TwitchPubSub.cs`, `TwitchWatcher.cs`, `KickWatcher.cs`, `PointsRedeemer.cs`, `RedeemLog.cs`, `BonusGuard.cs`,
       `bonus.js`, `BulkRedeemDialog.cs`, `ChannelsDialog.cs`, `VideoQuality.cs`, `AdBlock.cs`, e os botões e menus
       delas em `DeckForm.cs` e `AccountPane.cs`. O código fica guardado no commit da Fase 0, para voltar se você decidir.
-- [ ] Não trazer a pasta `nudes/`.
-- [ ] Renomear para **DeckPokeIdle**: nome da janela, exe, pasta de dados `%LOCALAPPDATA%\DeckPokeIdle`
+- [x] Não trazer a pasta `nudes/`.
+- [x] Renomear para **DeckPokeIdle**: nome da janela, exe, pasta de dados `%LOCALAPPDATA%\DeckPokeIdle`
       (separada da do deck original, para os dois não se misturarem) e a trava de "um deck aberto por vez".
-- [ ] O crédito "by: artbruno" sai da barra de baixo e vai para um "Sobre" no menu ⚙ (com o link do projeto original).
-- [ ] Compilar e conferir que nada mais quebrou.
+- [x] Compilar e conferir que nada mais quebrou (compila sem erros; falta você testar nas 4 contas).
 
 ## Fase 2 — Barra de cima enxuta
 
 - [ ] **Esquerda:** nome do deck + layouts: **Grade** (com "Colunas" na setinha), **Principal**, **Foco**.
 - [ ] **Direita, sempre à vista:** **Ultra**, **Eco**, **Mercado** (só aparece quando a Fase 5 existir), **⚙**.
-- [ ] **Menu ⚙** junta o resto: Extensões, Sniper, Zoom, Tela cheia (F11 continua), Diagnóstico e Sobre.
+- [ ] **Menu ⚙** junta o resto: Extensões, Sniper, Zoom, Tela cheia (F11 continua), Diagnóstico e **Sobre** (com o crédito "by: artbruno", que sai da barra de baixo, e o link do projeto original).
 - [ ] Saem da barra os 4 botões das contas: a troca de conta passa a ser pelas miniaturas, e o menu de cada conta
       passa para o "⋯" do cabeçalho dela (Fase 3).
 

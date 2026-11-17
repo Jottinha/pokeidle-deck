@@ -1,4 +1,4 @@
-using Microsoft.Web.WebView2.Core;
+﻿using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
 namespace PokeIdleMulti;
@@ -15,7 +15,7 @@ internal sealed class PopupWindow : Form
     private PopupWindow(Size size, bool closeOnDeactivate)
     {
         _closeOnDeactivate = closeOnDeactivate;
-        Text = "PokeIdle Deck";
+        Text = DeckForm.AppName;
         Icon = Theme.AppIcon;
         BackColor = Theme.Back;
         StartPosition = FormStartPosition.Manual;

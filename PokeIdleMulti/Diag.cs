@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Globalization;
 using System.IO.Compression;
 using System.Net;
@@ -369,7 +369,7 @@ internal sealed class PaneDiag
           o.janela = innerWidth + 'x' + innerHeight + ' zoom ' + devicePixelRatio;
           const p = document.getElementById('carga-pct'), t = document.getElementById('carga-etapa');
           o.carga = p || t ? cut((p ? p.textContent + '% ' : '') + (t ? t.textContent : '')) : null;
-          try { const f = window.__deckBonus && window.__deckBonus.summary(); o.socketDoJogo = f ? (f.connected ? 'conectado' : 'não conectado') : 'sem o script do bônus'; }
+          try { const f = window.__deckPvp && window.__deckPvp.status(); o.socketDoJogo = f ? (f.connected ? 'conectado' : 'não conectado') : 'sem o script do PvP'; }
           catch (e) { o.socketDoJogo = 'erro ' + cut(e.message); }
           const shown = e => { const s = getComputedStyle(e), r = e.getBoundingClientRect();
             return s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0 && r.width * r.height > innerWidth * innerHeight * 0.02; };
@@ -486,7 +486,7 @@ internal static class Diag
 {
     /// <summary>A pasta do diagnóstico (diagnostico, na pasta do deck; a do autoteste é outra).</summary>
     public static string Folder { get; set; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PokeIdleMulti", "diagnostico");
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeckPokeIdle", "diagnostico");
 
     private static readonly Dictionary<string, int> Seen = new();
 
@@ -737,7 +737,7 @@ internal static class Diag
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("PokeIdleDeck-diagnostico/1.0");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("DeckPokeIdle-diagnostico/1.0");
             var watch = Stopwatch.StartNew();
             using var response = await http.GetAsync("https://pokeidle.io/app", HttpCompletionOption.ResponseHeadersRead);
             string Header(string name) => response.Headers.TryGetValues(name, out var v) ? string.Join(",", v) : "";
@@ -777,7 +777,7 @@ internal static class Diag
     public static async Task<string> CreateReportAsync(string outputFolder, CoreWebView2Environment? env, IReadOnlyList<AccountPane> panes,
         IEnumerable<string> deckLines, string root, bool outside)
     {
-        var report = new List<string> { $"PokeIdle Deck: diagnóstico de {DateTime.Now:dd/MM/yyyy HH:mm:ss}", "" };
+        var report = new List<string> { $"DeckPokeIdle: diagnóstico de {DateTime.Now:dd/MM/yyyy HH:mm:ss}", "" };
         report.Add("== PC ==");
         // O WebView2 só se lê na thread da janela: antes de ir para o fundo.
         string? version = env?.BrowserVersionString, userData = env?.UserDataFolder;
@@ -826,7 +826,7 @@ internal static class Diag
             pane.Diag?.Flush();
 
         Directory.CreateDirectory(outputFolder);
-        string zip = Path.Combine(outputFolder, $"PokeIdleDeck-diagnostico-{DateTime.Now:yyyyMMdd-HHmmss}.zip");
+        string zip = Path.Combine(outputFolder, $"DeckPokeIdle-diagnostico-{DateTime.Now:yyyyMMdd-HHmmss}.zip");
         await Task.Run(() =>
         {
             using var archive = ZipFile.Open(zip, ZipArchiveMode.Create);

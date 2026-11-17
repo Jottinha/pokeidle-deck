@@ -1,12 +1,9 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace PokeIdleMulti;
 
 internal enum DeckLayout { Grid, Columns, Focus }
-
-/// <summary>O bônus do PokeIdle que o deck resgata com os pontos de cada canal da Kick ou da Twitch (1 h cada, as horas acumulam).</summary>
-internal enum KickReward { Xp, Capture, Lure }
 
 /// <summary>Preferências do deck salvas entre uma execução e outra.</summary>
 internal sealed class DeckConfig
@@ -69,96 +66,6 @@ internal sealed class DeckConfig
 
     public bool Maximized { get; set; } = true;
 
-    /// <summary>
-    /// Contas (1 a 4) que mantêm as lives abertas. O bônus só vale para a conta do jogo vinculada
-    /// à Twitch/Kick logada nas lives dela, então normalmente é só a main.
-    /// </summary>
-    public List<int> LivesAccounts { get; set; } = new() { 1 };
-
-    /// <summary>
-    /// Streamers oficiais na Twitch (a lista do painel de bônus do jogo), em ordem de prioridade. Desde 04/11/2026 o
-    /// bônus da Twitch sai dos pontos do canal, que só vêm com a live tocando (estar no chat não conta mais): o
-    /// deck abre o player das primeiras que estiverem no ar, até <see cref="TwitchLives"/> (<see cref="TwitchLive"/>).
-    /// </summary>
-    public List<string> TwitchChannels { get; set; } = new()
-    {
-        "tftoddy", "clovaobengala", "axtlol", "patopapao", "matta", "guaxilol1", "rodil",
-        "cogu", "luccatv", "faasii", "biscoitao", "techzz", "dersin2k", "denissnidertv",
-    };
-
-    /// <summary>Quantas lives da Twitch abrir em cada conta (Lives → Config…). De fábrica 2, como na Kick.</summary>
-    public int TwitchLives { get; set; } = TwitchLive.DefaultSlots;
-
-    /// <summary>
-    /// O bônus que cada conta resgata sozinha com os pontos das lives da Twitch abertas nela (Lives → Config…);
-    /// null: a conta não resgata.
-    /// </summary>
-    public KickReward?[] RedeemTwitch { get; set; } = new KickReward?[Accounts];
-
-    /// <summary>Pegar sozinho o baú de bônus da Twitch (+50 a cada ~15 min, que só vem para quem clica).</summary>
-    public bool ClaimTwitchBonus { get; set; } = true;
-
-    /// <summary>
-    /// A Twitch leve em cada conta: o player das lives da Twitch abre parado, sem vídeo, e quem assiste é o deck, sem
-    /// navegador (<see cref="TwitchWatcher"/>). Sempre ligada desde 12/11 (saiu de Lives → Config…, e o deck.json com
-    /// false volta ligado ao abrir). O player com vídeo segue no código (o autoteste ainda passa por ele) para o caso de
-    /// precisar de novo.
-    /// </summary>
-    public bool[] TwitchLight { get; set; } = Enumerable.Repeat(true, Accounts).ToArray();
-
-    /// <summary>
-    /// A Kick leve em cada conta: o player das lives da Kick fica em branco (abre só para resgatar), e quem assiste é o
-    /// deck, sem navegador (<see cref="KickWatcher"/>). Rende igual ao player (conferido em 05/11). Sempre ligada desde
-    /// 12/11, como a <see cref="TwitchLight"/> (o player com vídeo segue no código).
-    /// </summary>
-    public bool[] KickLight { get; set; } = Enumerable.Repeat(true, Accounts).ToArray();
-
-    /// <summary>
-    /// A guarda do bônus em cada conta (Lives → Config…): com o bônus escolhido num site vencendo em menos de 30 min, o deck
-    /// resgata 1 num canal fora das lives abertas que tenha os pontos (offline primeiro). De fábrica ligada em todas.
-    /// </summary>
-    public bool[] BonusGuard { get; set; } = Enumerable.Repeat(true, Accounts).ToArray();
-
-    /// <summary>
-    /// Streamers oficiais na Kick, em ordem de prioridade. Abre a live inteira, que é o que rende pontos
-    /// do canal, mas só das primeiras que estiverem no ar, até <see cref="KickLives"/> (<see cref="KickLive"/>).
-    /// </summary>
-    public List<string> KickChannels { get; set; } = new() { "biscoitao", "yetz", "surskity" };
-
-    /// <summary>Quantas lives da Kick abrir em cada conta (Lives → Config…). De fábrica 2, as que a Kick conta para os pontos.</summary>
-    public int KickLives { get; set; } = KickLive.DefaultSlots;
-
-    /// <summary>Altura da janela dos pontos da Kick, em pixels a 100% de escala (muda arrastando a borda dela).</summary>
-    public int KickPointsHeight { get; set; } = 640;
-
-    /// <summary>
-    /// O bônus que cada conta resgata sozinha com os pontos das lives da Kick abertas nela (Lives → Config…);
-    /// null: a conta não resgata.
-    /// </summary>
-    public KickReward?[] RedeemKick { get; set; } = new KickReward?[Accounts];
-
-    /// <summary>Da versão em que o resgate valia para todas as contas: lidos uma vez e convertidos em <see cref="RedeemKick"/>.</summary>
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public bool? KickRedeem { get; set; }
-
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public KickReward? KickReward { get; set; }
-
-    /// <summary>O que o botão kick fechou em cada conta.</summary>
-    public LiveLimit[] Kick { get; set; } = NewLimits();
-
-    /// <summary>O que o botão twitch fechou em cada conta.</summary>
-    public LiveLimit[] Twitch { get; set; } = NewLimits();
-
-    /// <summary>O que os botões kick e twitch fecharam em cada conta, por site.</summary>
-    public LiveLimit[] Limits(LiveSite site) => site == LiveSite.Kick ? Kick : Twitch;
-
-    /// <summary>Quantas lives de <paramref name="site"/> abrir em cada conta.</summary>
-    public int Lives(LiveSite site) => site == LiveSite.Kick ? KickLives : TwitchLives;
-
-    /// <summary>Os canais de <paramref name="site"/>, em ordem de prioridade.</summary>
-    public List<string> Channels(LiveSite site) => site == LiveSite.Kick ? KickChannels : TwitchChannels;
-
     /// <summary>A recompra de pokebolas, revives e poções de cada conta (o carrinho no cabeçalho dela).</summary>
     public RestockConfig[] Restock { get; set; } = Enumerable.Range(0, Accounts).Select(_ => new RestockConfig()).ToArray();
 
@@ -173,10 +80,6 @@ internal sealed class DeckConfig
 
     /// <summary>A velocidade das partidas mostradas (completa ou mini) em cada conta: 0 = a do jogo (acelera para caber até a próxima).</summary>
     public double[] PvpSpeed { get; set; } = new double[Accounts];
-
-    /// <summary>Da versão em que o kick só fechava a 2ª live: lido uma vez e convertido em <see cref="Kick"/>.</summary>
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public bool[]? KickSingle { get; set; }
 
     public static DeckConfig Load(string path)
     {
@@ -195,24 +98,6 @@ internal sealed class DeckConfig
         config.Zoom = Fill(config.Zoom, _ => 1.0);
         config.Muted = Fill(config.Muted, _ => false);
         config.Off = Fill(config.Off, _ => false);
-        // Twitch e Kick leves sempre ligadas (desde 12/11): o false de antes não vale mais.
-        config.TwitchLight = Enumerable.Repeat(true, Accounts).ToArray();
-        config.KickLight = Enumerable.Repeat(true, Accounts).ToArray();
-        config.BonusGuard = Fill(config.BonusGuard, _ => true);
-        config.Kick = Fill(config.Kick, _ => new LiveLimit())
-            .Select(k => k is { Closed: not null } ? k : new LiveLimit()).ToArray();
-        config.KickLives = Math.Clamp(config.KickLives, 0, KickLive.MaxSlots);
-        config.TwitchLives = Math.Clamp(config.TwitchLives, 0, TwitchLive.MaxSlots);
-        for (int i = 0; i < Accounts && config.KickSingle is not null; i++)
-            if (i < config.KickSingle.Length && config.KickSingle[i])
-                config.Kick[i].Slots = Math.Min(config.Kick[i].Slots ?? config.KickLives, 1);
-        config.KickSingle = null;
-        foreach (var kick in config.Kick)
-            kick.Fit(config.KickLives);
-        config.Twitch = Fill(config.Twitch, _ => new LiveLimit())
-            .Select(t => t is { Closed: not null } ? t : new LiveLimit()).ToArray();
-        foreach (var twitch in config.Twitch)
-            twitch.Fit(config.TwitchLives);
         config.Restock = Fill(config.Restock, _ => new RestockConfig()).Select(r => (r ?? new RestockConfig()).Normalized()).ToArray();
         config.Pvp = Fill(config.Pvp, _ => false);
         config.PvpScreen = Fill(config.PvpScreen, _ => PvpScreens.Off).Select(PvpScreens.Normalized).ToArray();
@@ -220,16 +105,6 @@ internal sealed class DeckConfig
         config.Focused = Math.Clamp(config.Focused, 0, Accounts - 1);
         config.GameFps = Math.Clamp(config.GameFps, 5, 60);
         config.SpriteMs = Math.Clamp(config.SpriteMs, 220, 10000);
-        config.KickPointsHeight = Math.Clamp(config.KickPointsHeight, 300, 3000);
-        config.RedeemKick = Fill(config.RedeemKick, _ => null);
-        if (config.KickRedeem == true)
-            config.RedeemKick = config.RedeemKick.Select(r => (PokeIdleMulti.KickReward?)(r ?? config.KickReward ?? PokeIdleMulti.KickReward.Xp)).ToArray();
-        config.KickRedeem = null;
-        config.KickReward = null;
-        // Um número fora da lista (deck.json editado à mão) vira o XP, sem desligar o resgate da conta.
-        config.RedeemKick = config.RedeemKick.Select(r => r is KickReward reward && !Enum.IsDefined(reward) ? PokeIdleMulti.KickReward.Xp : r).ToArray();
-        config.RedeemTwitch = Fill(config.RedeemTwitch, _ => null)
-            .Select(r => r is KickReward reward && !Enum.IsDefined(reward) ? PokeIdleMulti.KickReward.Xp : r).ToArray();
         return config;
     }
 
@@ -246,41 +121,7 @@ internal sealed class DeckConfig
         }
     }
 
-    private static LiveLimit[] NewLimits() => Enumerable.Range(0, Accounts).Select(_ => new LiveLimit()).ToArray();
 
     private static T[] Fill<T>(T[]? values, Func<int, T> fallback) =>
         Enumerable.Range(0, Accounts).Select(i => values is not null && i < values.Length ? values[i] : fallback(i)).ToArray();
-}
-
-/// <summary>As lives de um site (Kick ou Twitch) que o botão dele (kick ou twitch) fechou numa conta.</summary>
-internal sealed class LiveLimit
-{
-    /// <summary>
-    /// Quantas lives do site abrem nesta conta; null é o limite do deck (<see cref="DeckConfig.KickLives"/>,
-    /// <see cref="DeckConfig.TwitchLives"/>). Cada live fechada leva a vaga dela junto, para a conferência de 2 em 2
-    /// min não abrir outra no lugar; 0 é "fechar todas".
-    /// </summary>
-    public int? Slots { get; set; }
-
-    /// <summary>Os canais fechados: não abrem nesta conta até abrir de novo no botão.</summary>
-    public List<string> Closed { get; set; } = new();
-
-    /// <summary>Alguma live fechada no botão (ele fica marcado).</summary>
-    [JsonIgnore]
-    public bool Limited => Slots is not null || Closed.Count > 0;
-
-    /// <summary>As vagas desta conta com o limite do deck em <paramref name="max"/>.</summary>
-    public int SlotsOf(int max) => Math.Clamp(Slots ?? max, 0, max);
-
-    /// <summary>
-    /// Acerta as vagas a um limite novo: chegar ao limite é ter todas (null), e um deck.json de antes (com o 2
-    /// fixo escrito em cada conta) também cai aqui.
-    /// </summary>
-    public void Fit(int max)
-    {
-        if (Slots is int slots && slots >= max)
-            Slots = null;
-        else if (Slots < 0)
-            Slots = 0;
-    }
 }

@@ -1,4 +1,4 @@
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Web.WebView2.Core;
@@ -111,7 +111,7 @@ internal static class TopIdle
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, Base + path);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) PokeIdleDeck");
+        request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) DeckPokeIdle");
         if (cookieHeader is not null)
             request.Headers.Add("Cookie", cookieHeader);
         using var response = await Http.SendAsync(request);

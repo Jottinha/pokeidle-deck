@@ -23,39 +23,18 @@ internal static class Program
             DeckBox.Show(null,
                 "Falta o WebView2 Runtime da Microsoft (o motor de navegador que o deck usa).\n\n" +
                 "Baixe em https://go.microsoft.com/fwlink/p/?LinkId=2124703 e abra o deck de novo.",
-                "PokeIdle Deck", DeckBoxIcon.Error);
+                DeckForm.AppName, DeckBoxIcon.Error);
             return;
         }
 
-        // Teste de consumo das lives: perfil de teste à parte, roda junto com o deck aberto.
-        if (args.Contains("--consumo"))
-        {
-            using var measuring = new Mutex(true, "PokeIdleDeck-consumo", out bool alone);
-            if (alone)
-            {
-                // A janela do teste na Área de trabalho 2; as lives ficam como no deck (fora da tela), para a medição valer.
-                TestDesktop.Start(hideStrays: false);
-                var test = new ConsumptionTest();
-                TestDesktop.HideUntilMoved(test);
-                Application.Run(test);
-            }
-            return;
-        }
-
-        bool selfTest = args.Contains("--self-test");
         // Dois decks abertos com as mesmas contas ficam se derrubando ("Account opened elsewhere").
-        using var single = new Mutex(true, selfTest ? "PokeIdleDeck-selftest" : "PokeIdleDeck", out bool first);
+        using var single = new Mutex(true, "DeckPokeIdle", out bool first);
         if (!first)
         {
-            DeckBox.Show(null, "O PokeIdle Deck já está aberto.", "PokeIdle Deck");
+            DeckBox.Show(null, $"O {DeckForm.AppName} já está aberto.", DeckForm.AppName);
             return;
         }
 
-        // O autoteste abre na Área de trabalho 2 do Windows (sem ela, no 2º monitor), longe de quem está jogando.
-        if (selfTest)
-            TestDesktop.Start();
-        var deck = new DeckForm(selfTest);
-        TestDesktop.HideUntilMoved(deck);
-        Application.Run(deck);
+        Application.Run(new DeckForm());
     }
 }
